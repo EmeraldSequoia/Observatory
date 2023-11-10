@@ -1,0 +1,3 @@
+see <language>.lproj/WhatsNew.txt
+
+Except:  For "Bug fixes", we're apparently just using English everywhere (as of 1.4.2.5, Dec 2017).

@@ -1,0 +1,5 @@
+/* App display name */
+"CFBundleDisplayName" = "天文台";
+
+/* Explanatory text when prompting user to enable location services */
+"NSLocationWhenInUseUsageDescription" = "位置被用于天文计算。";

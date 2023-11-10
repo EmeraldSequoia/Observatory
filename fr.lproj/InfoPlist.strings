@@ -1,0 +1,5 @@
+/* App display name */
+"CFBundleDisplayName" = "Observatoire";
+
+/* Explanatory text when prompting user to enable location services */
+"NSLocationWhenInUseUsageDescription" = "Les emplacements sont utilisés pour les calculs astronomiques.";

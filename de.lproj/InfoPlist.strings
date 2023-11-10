@@ -1,0 +1,5 @@
+/* App display name */
+"CFBundleDisplayName" = "Sternwarte";
+
+/* Explanatory text when prompting user to enable location services */
+"NSLocationWhenInUseUsageDescription" = "Standorte für astronomische Berechnungen verwendet.";
