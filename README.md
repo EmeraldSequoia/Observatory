@@ -10,7 +10,7 @@ Please see the note in the `docs` repository about dependent libraries -- the Xc
 requires that all of the libraries required by this app be at the same level as the app directory
 itself.
 
-One way to set up the dependencies required for Observatory would be:
+One way to set up the dependencies required for Observatory would be to use [ssh](https://docs.github.com/en/authentication/connecting-to-github-with-ssh):
 
 ```shell
 mkdir emeraldsequoia
