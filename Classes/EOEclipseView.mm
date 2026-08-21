@@ -68,7 +68,7 @@
 
     // For the moon
     const double perigeeDistance = 355000.0;	    // km
-    const double au = 149600000.0;		    // km; units of planetGeocentricDistance
+    const double au = 149600000.0;		    // km; units of planetTopocentricDistance
     const double lunarRadius =   1737.10;	    // km
     const double solarRadius = 695500;              // km
 
@@ -77,7 +77,10 @@
     const double pixelsPerAngularRadian = moonRadiusAtPerigee / moonAngularRadiusAtPerigee;
     //printf("moonRad / moonAngularRad = %.2f / %.2f = %.2f\n", moonRadiusAtPerigee, moonAngularRadiusAtPerigee, pixelsPerAngularRadian);
     
-    const double moonAngularRadiusNow = atan(lunarRadius/(astro->planetGeocentricDistance(ECPlanetMoon)*au));
+    // Topocentric, not geocentric distances: they size the drawn discs, and the Moon's disc is up to 1.7% larger
+    // overhead -- enough to draw a hairline annulus at an eclipse calculateEclipse classifies as total.  The
+    // classification sizes its discs topocentrically the same way, so drawing and label agree by construction.
+    const double moonAngularRadiusNow = atan(lunarRadius/(astro->planetTopocentricDistance(ECPlanetMoon)*au));
     const double moonPixelRadiusNow = pixelsPerAngularRadian * moonAngularRadiusNow;
     //EC_printAngle(moonAngularRadiusNow, "moonAngularRadiusNow");
     //printf("Pixel radii now: sun=%.2f, moon=%.2f\n", sunPixelRadiusNow, moonPixelRadiusNow);
@@ -96,7 +99,7 @@
 	ECEclipseKind eclipseKind = astro->eclipseKind();
 	bool solarNotLunar = ESAstronomyManager::eclipseKindIsMoreSolarThanLunar(eclipseKind);
 
-	const double sunAngularRadiusNow = atan(solarRadius/(astro->planetGeocentricDistance(ECPlanetSun)*au));
+	const double sunAngularRadiusNow = atan(solarRadius/(astro->planetTopocentricDistance(ECPlanetSun)*au));
 	const double sunPixelRadiusNow = pixelsPerAngularRadian * sunAngularRadiusNow;
 	//EC_printAngle(sunAngularRadiusNow, "sunAngularRadiusNow");
 
