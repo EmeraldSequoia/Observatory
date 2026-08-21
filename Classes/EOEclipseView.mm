@@ -147,7 +147,7 @@
 	    double sunPixelX = - moonPixelX;
 	    double moonPixelY = -sinTheta * angularSeparation * pixelsPerAngularRadian / 2;  // change in sign from view coordinate system
 	    double sunPixelY = - moonPixelY;
-	    horizonPixelY = - avgAlt*pixelsPerAngularRadian;
+	    horizonPixelY = - (avgAlt + kECRefractionAtHorizonX)*pixelsPerAngularRadian;  // the *apparent* (refracted) horizon
 	    //printf("setting horizonPixelY to %.2f based on avgAlt %.2f\n", horizonPixelY, avgAlt);
 
 	    if (eclipseKind == ECEclipseTotalSolar) {
@@ -207,7 +207,7 @@
 	    //double avgAz = EC_fmod(sunAzimuth + azDelta / 2, M_PI * 2);
 	    double avgAlt = (earthShadowAltitude + moonAltitude) / 2;
 	    //EC_printAngle(avgAlt, "avgAlt");
-	    horizonPixelY = - avgAlt*pixelsPerAngularRadian;
+	    horizonPixelY = - (avgAlt + kECRefractionAtHorizonX)*pixelsPerAngularRadian;  // the *apparent* (refracted) horizon
 	    //printf("setting horizonPixelY to %.2f based on avgAlt %.2f\n", horizonPixelY, avgAlt);
 
 	    double moonPixelX;
@@ -298,13 +298,13 @@
 	    //printf("w = %.2f, h = %.2f, hPY = %.2f\n", w, h, horizonPixelY);
 	    [[UIColor colorWithRed:0 green:0.3 blue:0 alpha:0.5] setFill];
 	    CGContextFillRect(context, CGRectMake(-w/2, -horizonPixelY, w, h));  // flipped signs come from the view coordinate system
-	    if (horizonPixelY > 0) {
-		[statusLabel setHidden:true];
-		[horizonLabel setHidden:false];
-	    } else {
-		[statusLabel setHidden:false];
-		[horizonLabel setHidden:true];
-	    }
+	}
+	// The "Below horizon" caption is gated on the eclipse kind -- the same classification the
+	// rest of the app renders -- rather than on the wash's pixel position, so the two can't
+	// disagree.  The wash keeps its own life: it may cover part of a disc with no caption.
+	if (drawingSomething && (eclipseKind == ECEclipseSolarNotUp || eclipseKind == ECEclipseLunarNotUp)) {
+	    [statusLabel setHidden:true];
+	    [horizonLabel setHidden:false];
 	} else {
 	    [statusLabel setHidden:false];
 	    [horizonLabel setHidden:true];
