@@ -68,7 +68,7 @@
 
     // For the moon
     const double perigeeDistance = 355000.0;	    // km
-    const double au = 149600000.0;		    // km; units of planetTopocentricDistance
+    const double au = 149600000.0;		    // km; units of planetTopocentricDistance && planetGeocentriDistance
     const double lunarRadius =   1737.10;	    // km
     const double solarRadius = 695500;              // km
 
