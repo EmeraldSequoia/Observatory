@@ -2,7 +2,8 @@
 
 ## Overview
 
-This directory contains code for the iOS "Emerald Observatory" app.
+This directory contains code for the iOS "Emerald Observatory" app. (Code for the web version of Observatory
+is contained within the [chronometer-web](https://github.com/EmeraldSequoia/chronometer-web) repository).
 
 ## Dependencies
 
