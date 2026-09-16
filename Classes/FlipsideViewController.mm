@@ -92,8 +92,7 @@ static NSDateFormatter	*dateFormatter, *alarmTimeFormatter;
     [dateFormatter setTimeStyle:NSDateFormatterFullStyle];
     [dateFormatter setDateStyle:NSDateFormatterFullStyle];
     [alarmTimeFormatter setTimeStyle:NSDateFormatterShortStyle];
-    // self.view.backgroundColor = [UIColor blackColor];
-    self.view.backgroundColor = [UIColor redColor];
+    self.view.backgroundColor = [UIColor blackColor];
     // helpText.backgroundColor = [UIColor viewFlipsideBackgroundColor];
     self.title = NSLocalizedString(@"Options", @"Title for options settings screen");
     updateTimer = [NSTimer scheduledTimerWithTimeInterval:1 target:self selector:@selector(tick) userInfo:nil repeats:true];
@@ -129,6 +128,17 @@ static NSDateFormatter	*dateFormatter, *alarmTimeFormatter;
     return UIStatusBarStyleLightContent;
 }
 
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    // The nib lays out from the top of the view; keep the whole thing clear of the status bar and home indicator
+    UIEdgeInsets safeArea = self.view.safeAreaInsets;
+    CGRect bounds = self.view.bounds;
+    contentView.frame = CGRectMake(bounds.origin.x,
+				   bounds.origin.y + safeArea.top,
+				   bounds.size.width,
+				   bounds.size.height - safeArea.top - safeArea.bottom);
+}
+
 - (void)viewWillDisappear:(BOOL)animated {
     [updateTimer invalidate];
     updateTimer = nil;
@@ -138,7 +148,7 @@ static NSDateFormatter	*dateFormatter, *alarmTimeFormatter;
     NSStringEncoding *enc = nil;
     NSString *cpyrt = [NSString stringWithContentsOfFile:[[NSBundle mainBundle] pathForResource:@"copyright" ofType:@"txt"] usedEncoding:enc error:nil];
     NSString *versn = [NSString stringWithContentsOfFile:[[NSBundle mainBundle] pathForResource:@"help" ofType:@"txt"] usedEncoding:enc error:nil]; // really just the version string
-    helpText.text = [[versn         stringByAppendingString:[[NSBundle mainBundle] localizedStringForKey:@"Help Text0" value:nil table:nil]] stringByAppendingString:@"\n\n"];
+    helpText.text = [[[NSBundle mainBundle] localizedStringForKey:@"Help Text0" value:nil table:nil] stringByAppendingString:@"\n\n"];
     helpText.text = [[helpText.text stringByAppendingString:[[NSBundle mainBundle] localizedStringForKey:@"Help Text1" value:nil table:nil]] stringByAppendingString:@"\n\n"];
     helpText.text = [[helpText.text stringByAppendingString:[[NSBundle mainBundle] localizedStringForKey:@"Help Text1.5" value:nil table:nil]] stringByAppendingString:@"\n\n"];
     helpText.text = [[helpText.text stringByAppendingString:[[NSBundle mainBundle] localizedStringForKey:@"Help Text2" value:nil table:nil]] stringByAppendingString:@"\n\n"];
@@ -149,6 +159,9 @@ static NSDateFormatter	*dateFormatter, *alarmTimeFormatter;
     helpText.text = [[helpText.text stringByAppendingString:[[NSBundle mainBundle] localizedStringForKey:@"Help Text7" value:nil table:nil]] stringByAppendingString:@"\n\n"];
     helpText.text = [[helpText.text stringByAppendingString:[[NSBundle mainBundle] localizedStringForKey:@"Help Text8" value:nil table:nil]] stringByAppendingString:@"\n\n"];
     helpText.text = [helpText.text stringByAppendingString:cpyrt];
+    // Version string goes last, as its own paragraph
+    helpText.text = [[helpText.text stringByAppendingString:@"\n"]
+			stringByAppendingString:[versn stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
     ULSSwitch.on = [[NSUserDefaults standardUserDefaults] boolForKey:@"EOUseLocationServices"];
     DALaSwitch.on = [[NSUserDefaults standardUserDefaults] boolForKey:@"EODisableAutoLock"];
     DALbSwitch.on = [[NSUserDefaults standardUserDefaults] boolForKey:@"EODisableAutoLockUnplugged"];
@@ -163,7 +176,25 @@ static NSDateFormatter	*dateFormatter, *alarmTimeFormatter;
 }
 
 - (IBAction)webAction:(id)sender {
-    [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"http://emeraldsequoia.com/"]];
+    // Address comes from EOWebSiteURL in Observatory-Info.plist; openURL: alone is refused by recent iOS versions
+    NSString *urlString = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"EOWebSiteURL"];
+    if ([urlString length] == 0) {
+	urlString = @"https://bjornfreemanbenson.com/emerald-observatory";
+    }
+    NSURL *url = [NSURL URLWithString:urlString];
+    if (!url) {
+#ifndef NDEBUG
+	NSLog(@"EOWebSiteURL is not a valid URL: %@", urlString);
+#endif
+	return;
+    }
+    [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:^(BOOL success) {
+#ifndef NDEBUG
+	if (!success) {
+	    NSLog(@"Couldn't open %@", url);
+	}
+#endif
+    }];
 }
 
 - (IBAction)alarmSetAction:(id)sender {
@@ -309,10 +340,6 @@ static NSTimer *alarmTestButtonTimer = nil;
 
 
 // Override to allow orientations other than the default portrait orientation.
-- (BOOL)shouldAutorotate {
-    return YES;
-}
-
 - (UIInterfaceOrientationMask) supportedInterfaceOrientations {
     return UIInterfaceOrientationMaskAll;
 }

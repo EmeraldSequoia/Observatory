@@ -30,10 +30,6 @@
     [EOClock setAlarmTime:picker.date];
 }
 
-- (BOOL)shouldAutorotate {
-    return YES;
-}
-
 - (UIInterfaceOrientationMask) supportedInterfaceOrientations {
     return UIInterfaceOrientationMaskAll;
 }

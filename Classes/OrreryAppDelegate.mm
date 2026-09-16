@@ -8,6 +8,7 @@
 
 //#include <sys/sysctl.h>
 #import "OrreryAppDelegate.h"
+#import <UserNotifications/UserNotifications.h>
 #import "MainViewController.h"
 #import "EOClock.h"
 #import "ESUtil.hpp"
@@ -77,9 +78,8 @@ static bool currentDAL;
     ESThread::inMainThread();  // may be required to initialize main thread
     ESTime::init(ESNTPMakerFlag);
 
-    UIUserNotificationType types = UIUserNotificationTypeSound | UIUserNotificationTypeAlert;
-    UIUserNotificationSettings *mySettings = [UIUserNotificationSettings settingsForTypes:types categories:nil];
-    [application registerUserNotificationSettings:mySettings];
+    [[UNUserNotificationCenter currentNotificationCenter] requestAuthorizationWithOptions:(UNAuthorizationOptionSound | UNAuthorizationOptionAlert)
+                                                                        completionHandler:^(BOOL granted, NSError *error) {}];
 
     new ESLocationTimeHelper;
 
@@ -89,23 +89,9 @@ static bool currentDAL;
     currentDAL = [[NSUserDefaults standardUserDefaults] boolForKey:@"EODisableAutoLock"];
     ESAstronomyManager::initializeStatics();
     tracePrintf("init-ing EOClock");
-    theWholeWindow = theWindow;
     theClock = [[EOClock alloc] init];	    // must precede MainViewController init
-    
-    tracePrintf("init-ing MainViewController");
-    MainViewController *aController;
-    aController = [[MainViewController alloc] initWithNibName:@"MainView-iPad" bundle:nil];
 
-    self.mainViewController = aController;
-    theWindow.rootViewController = mainViewController;
-    [aController release];
-    
-    tracePrintf("making theWindow visible");
-    [theWindow makeKeyAndVisible];
-    
-    [NSTimer scheduledTimerWithTimeInterval:0.1 target:self selector:@selector(showQuickStart) userInfo:nil repeats:false];
-    
-    //[theClock showQuickStartIfNecessaryInView:[mainViewController view]];  // must follow initialization of view *and* initialization of clock
+    // The window and MainViewController are created in setupWindow:, called by OrrerySceneDelegate when the scene connects
 
     [EOBatteryAndDAL startup];
     [ECAudio setup];
@@ -114,6 +100,30 @@ static bool currentDAL;
 
     traceExit("didFinishLaunchingWithOptions");
     return YES;
+}
+
+- (void)setupWindow:(UIWindow *)window {
+    traceEnter("setupWindow");
+    self.theWindow = window;
+    theWholeWindow = theWindow;
+    theWindow.backgroundColor = [UIColor blackColor];
+    theWindow.multipleTouchEnabled = YES;
+
+    tracePrintf("init-ing MainViewController");
+    MainViewController *aController;
+    aController = [[MainViewController alloc] initWithNibName:@"MainView-iPad" bundle:nil];
+
+    self.mainViewController = aController;
+    theWindow.rootViewController = mainViewController;
+    [aController release];
+
+    tracePrintf("making theWindow visible");
+    [theWindow makeKeyAndVisible];
+
+    [NSTimer scheduledTimerWithTimeInterval:0.1 target:self selector:@selector(showQuickStart) userInfo:nil repeats:false];
+
+    //[theClock showQuickStartIfNecessaryInView:[mainViewController view]];  // must follow initialization of view *and* initialization of clock
+    traceExit("setupWindow");
 }
 
 - (void)applicationWillResignActive:(UIApplication *)application {
@@ -223,7 +233,7 @@ nil,
 NSString *h8 = NSLocalizedStringWithDefaultValue(@"Help Text8",
 nil,
 [NSBundle mainBundle],
-@"Check our website at http://emeraldSequoia.com/eo/ for more details (tap our logo on the bottom of this page).  Don't hesitate to send mail if you have questions or problems.  Comments and suggestions are also welcome.",
+@"Check our website at https://bjornfreemanbenson.com/emerald-observatory for more details (tap our logo on the bottom of this page).  Don't hesitate to send mail if you have questions or problems.  Comments and suggestions are also welcome.",
 @"help message8");
 
 NSString *i0 = NSLocalizedStringWithDefaultValue(@"iTC description0",
@@ -251,7 +261,7 @@ NSString *i3 = NSLocalizedStringWithDefaultValue(@"iTC description3",
 NSString *i4 = NSLocalizedStringWithDefaultValue(@"iTC description4",
 				  nil,
 				  [NSBundle mainBundle],
-@"Tap on the display to move time forward or backward by a minute, hour, day, month, year or century.  A detailed manual for the operation of Emerald Observatory can be found at the 'Emerald Sequoia LLC Web Site' listed below, at http://emeraldsequoia.com/eo/",
+@"Tap on the display to move time forward or backward by a minute, hour, day, month, year or century.",
 				  @"iTC description4; terms here should match those in the other strings");
 NSString *i5 = NSLocalizedStringWithDefaultValue(@"iTC description5",
 				  nil,
@@ -298,6 +308,52 @@ NSString *translationQueue6 = NSLocalizedString(@"%Off by", @"phrase to indicate
     printf("%s\n\n", [i5 UTF8String]);
     printf("%s\n\n", [k0 UTF8String]);
 #endif
+}
+
+@end
+
+@implementation OrrerySceneDelegate
+
+@synthesize window;
+
+static OrreryAppDelegate *appDelegate() {
+    return (OrreryAppDelegate *)[[UIApplication sharedApplication] delegate];
+}
+
+- (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)connectionOptions {
+    if (![scene isKindOfClass:[UIWindowScene class]]) {
+        return;
+    }
+    UIWindow *aWindow = [[UIWindow alloc] initWithWindowScene:(UIWindowScene *)scene];
+    self.window = aWindow;
+    [aWindow release];
+    [appDelegate() setupWindow:window];
+}
+
+- (void)sceneWillResignActive:(UIScene *)scene {
+    [appDelegate() applicationWillResignActive:[UIApplication sharedApplication]];
+}
+
+- (void)sceneDidBecomeActive:(UIScene *)scene {
+    [appDelegate() applicationDidBecomeActive:[UIApplication sharedApplication]];
+}
+
+- (void)sceneDidEnterBackground:(UIScene *)scene {
+    hasEnteredBackground = true;
+    [appDelegate() applicationDidEnterBackground:[UIApplication sharedApplication]];
+}
+
+- (void)sceneWillEnterForeground:(UIScene *)scene {
+    // Scenes get this at initial launch too, but the old app life cycle only sent it after a trip to the background
+    if (!hasEnteredBackground) {
+        return;
+    }
+    [appDelegate() applicationWillEnterForeground:[UIApplication sharedApplication]];
+}
+
+- (void)dealloc {
+    [window release];
+    [super dealloc];
 }
 
 @end

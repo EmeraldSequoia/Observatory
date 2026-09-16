@@ -55,7 +55,7 @@
 	[(id)baseView setNeedsDisplay];
     }
     [Utilities setNewOrientation:interfaceOrientation];
-    CGSize newSize = [UIScreen mainScreen].applicationFrame.size;
+    CGSize newSize = [UIScreen mainScreen].bounds.size;
     [[EOClock theClock] resetAfterOrientationChangeToOrientation:interfaceOrientation newSize:newSize];
     traceExit ("viewWillAppear");
 }
@@ -94,7 +94,8 @@
     controller.delegate = self;
 
     controller.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;
-    [UIApplication sharedApplication].statusBarHidden = NO;
+    controller.modalPresentationStyle = UIModalPresentationFullScreen;  // iOS 13 and later would otherwise use an inset sheet, which clips this layout
+    self.statusBarHidden = NO;  // Not [UIApplication setStatusBarHidden:], which is a no-op as of iOS 27
     [self presentViewController:controller animated:YES completion:NULL];
     
     [controller release];
@@ -109,10 +110,6 @@
     // Release any cached data, images, etc. that aren't in use.
 }
 
-
- - (BOOL)shouldAutorotate {
-     return YES;
- }
 
  - (UIInterfaceOrientationMask) supportedInterfaceOrientations {
      return UIInterfaceOrientationMaskAll;

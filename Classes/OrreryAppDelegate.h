@@ -21,6 +21,18 @@
 
 + (UIWindow *)theWholeWindow;
 - (void)printLocalizedStrings;
+- (void)setupWindow:(UIWindow *)window;
+
+@end
+
+// Owns the window and forwards scene life-cycle events to OrreryAppDelegate's
+// old application-level handlers, which UIKit no longer calls once scenes are adopted.
+@interface OrrerySceneDelegate : UIResponder <UIWindowSceneDelegate> {
+    UIWindow *window;
+    bool     hasEnteredBackground;
+}
+
+@property (nonatomic, retain) UIWindow *window;
 
 @end
 

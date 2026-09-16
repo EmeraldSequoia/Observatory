@@ -258,16 +258,23 @@ static int activeCleanupID = 0;
     
     
 #ifdef SESSION_ALWAYS_ACTIVE
-    // deactivate the audio session when the sound is finished
-    st = [audioSession setActive:YES error:&error];
-    if (st != YES) {
+    // setActive: blocks, which makes the UI unresponsive if it happens on the main thread, so activate off-thread
+    // and set up the silent sounds afterwards, back on the main thread where the timer needs to be scheduled.
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_DEFAULT, 0), ^{
+        NSError *activateError = nil;
+        BOOL activated = [audioSession setActive:YES error:&activateError];
+        if (activated != YES) {
 #ifndef NDEBUG
-        NSLog(@"audioSession setActive failed with error: %@", [error localizedDescription]);
+            NSLog(@"audioSession setActive failed with error: %@", [activateError localizedDescription]);
 #endif
-    }
-#endif
-
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self setupSilentSounds];
+        });
+    });
+#else
     [self setupSilentSounds];
+#endif
 }
 
 @end

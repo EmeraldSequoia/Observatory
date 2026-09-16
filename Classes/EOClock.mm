@@ -15,6 +15,7 @@
 #import "OrreryAppDelegate.h"
 #import "MainViewController.h"
 #import <QuartzCore/QuartzCore.h>
+#import <UserNotifications/UserNotifications.h>
 #import "Constants.h"
 #import "ESWatchTime.hpp"
 #import "ESTimeLocAstroEnvironment.hpp"
@@ -161,98 +162,90 @@ typedef enum eoseason {
 }
 
 // First-run quick-start alert part 1 of 2 start
-static NSString *firstVersionRun = NULL;
-static NSString *thisVersion = NULL;
-static bool isNewbie = false;
+//static NSString *firstVersionRun = NULL;
+//static NSString *thisVersion = NULL;
+//static bool isNewbie = false;
 static int shouldShowQuickStart = false;
 
 -(void)showQuickStartIfNecessaryInView:(UIView *)parentView {
     if ([ECErrorReporter errorShowing] || !shouldShowQuickStart) {
 	return;
     }
-    NSBundle *mainBundle = [NSBundle mainBundle];
-    ESAssert(thisVersion != NULL);
-    NSString *versionSummaryString = NSLocalizedString(@"This app will be removed from the store on Nov 1 2023.\n\nPlease read the Details via the button below.", @"Version 2.3.5 first-run alert summary");
-    NSString *quickStartButtonText = NSLocalizedString(@"Details", @"Details about Emerald Sequoia shutdown");
-
-    UIAlertController* alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"WARNING", @"WARNING")
-                                                                   message:[NSString stringWithFormat:versionSummaryString, thisVersion]
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    // Details
-    UIAlertAction* quickStartAction = [UIAlertAction actionWithTitle:quickStartButtonText
-                                                               style:UIAlertActionStyleDefault
-                                                             handler:^(UIAlertAction *action) { 
-        [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://emeraldsequoia.com/esblog/2022/12/21/emerald-sequoias-future/"] options:@{} completionHandler:NULL];
-    }];
-    [alert addAction:quickStartAction];
-    // Later
-    UIAlertAction* laterAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"Later", @"First-run alert button to skip release notes for now")
-                                                           style:UIAlertActionStyleDefault
-                                                         handler:^(UIAlertAction *action) { 
-        // Do nothing
-    }];
-    [alert addAction:laterAction];
-    // Never
-    UIAlertAction* neverAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"Never", @"First-run alert button to permanently skip release notes")
-                                                               style:UIAlertActionStyleDefault
-                                                             handler:^(UIAlertAction *action) { 
-        // set the default, don't show again
-        [[NSUserDefaults standardUserDefaults] setObject:thisVersion forKey:@"EOVersionMsg"];
-        [[NSUserDefaults standardUserDefaults] synchronize];  // make sure we get written to disk (helpful for poor developers)
-    }];
-    [alert addAction:neverAction];
-
-    OrreryAppDelegate *appDelegate = (OrreryAppDelegate *)[[UIApplication sharedApplication] delegate];
-    if (appDelegate) {
-        MainViewController *mainViewController = appDelegate.mainViewController;
-        if (mainViewController) {
-            [mainViewController presentViewController:alert animated:YES completion:nil];
-        }
-    }
+//    ESAssert(thisVersion != NULL);
+//    NSString *versionSummaryString = NSLocalizedString(@"This app will be removed from the store on Nov 1 2023.\n\nPlease read the Details via the button below.", @"Version 2.3.5 first-run alert summary");
+//    NSString *quickStartButtonText = NSLocalizedString(@"Details", @"Details about Emerald Sequoia shutdown");
+//
+//    UIAlertController* alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"WARNING", @"WARNING")
+//                                                                   message:[NSString stringWithFormat:versionSummaryString, thisVersion]
+//                                                            preferredStyle:UIAlertControllerStyleAlert];
+//    // Details
+//    UIAlertAction* quickStartAction = [UIAlertAction actionWithTitle:quickStartButtonText
+//                                                               style:UIAlertActionStyleDefault
+//                                                             handler:^(UIAlertAction *action) { 
+//        [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://emeraldsequoia.com/esblog/2022/12/21/emerald-sequoias-future/"] options:@{} completionHandler:NULL];
+//    }];
+//    [alert addAction:quickStartAction];
+//    // Later
+//    UIAlertAction* laterAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"Later", @"First-run alert button to skip release notes for now")
+//                                                           style:UIAlertActionStyleDefault
+//                                                         handler:^(UIAlertAction *action) { 
+//        // Do nothing
+//    }];
+//    [alert addAction:laterAction];
+//    // Never
+//    UIAlertAction* neverAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"Never", @"First-run alert button to permanently skip release notes")
+//                                                               style:UIAlertActionStyleDefault
+//                                                             handler:^(UIAlertAction *action) { 
+//        // set the default, don't show again
+//        [[NSUserDefaults standardUserDefaults] setObject:thisVersion forKey:@"EOVersionMsg"];
+//        [[NSUserDefaults standardUserDefaults] synchronize];  // make sure we get written to disk (helpful for poor developers)
+//    }];
+//    [alert addAction:neverAction];
+//
+//    OrreryAppDelegate *appDelegate = (OrreryAppDelegate *)[[UIApplication sharedApplication] delegate];
+//    if (appDelegate) {
+//        MainViewController *mainViewController = appDelegate.mainViewController;
+//        if (mainViewController) {
+//            [mainViewController presentViewController:alert animated:YES completion:nil];
+//        }
+//    }
 }
 // First-run quick-start alert part 1 of 2 end
 
-@class UILocalNotification;
-static UILocalNotification *localNotification;
+// Uses UNUserNotificationCenter; the old UILocalNotification calls block launch forever on recent iOS versions
+static NSString *const kEOAlarmNotificationIdentifier = @"EOAlarm";
 
 + (void)removeExistingLocalNotification {
-    UIApplication *application = [UIApplication sharedApplication];
-    if ([application respondsToSelector:@selector(scheduledLocalNotifications)]) {
-	for (UILocalNotification *notification in [application scheduledLocalNotifications]) {
-	    //printf("Found local notification at startup, removing %s\n", [[[notification fireDate] description] UTF8String]);
-	    [application cancelLocalNotification:notification];
-	}
-    }
+    [[UNUserNotificationCenter currentNotificationCenter] removeAllPendingNotificationRequests];
 }
 
 + (void)setupLocalNotificationForAlarmStateEnabled:(bool)enabled {
     // Remove any existing local notification
-    UIApplication* app = [UIApplication sharedApplication];
-    bool useLocalNotifications = [UIApplication instancesRespondToSelector:@selector(scheduleLocalNotification:)];
-    if (useLocalNotifications && localNotification) {
-	//printf("Clearing local notification at %s\n", [[[localNotification fireDate] description] UTF8String]);
-	[app cancelLocalNotification:localNotification];
-	[localNotification release];
-	localNotification = NULL;
+    UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+    [center removePendingNotificationRequestsWithIdentifiers:@[kEOAlarmNotificationIdentifier]];
+
+    if (!enabled) {
+	return;
     }
 
-    // if (alarm enabled)
-    if (enabled && useLocalNotifications) {
-	Class classForUILocalNotification = NSClassFromString(@"UILocalNotification");
-	if (classForUILocalNotification) {
-	    localNotification = [[classForUILocalNotification alloc] init];
-	    localNotification.repeatInterval = NSCalendarUnitDay;
-	    localNotification.timeZone = ESCalendar_nsTimeZone(ESCalendar_localTimeZone());
-	}
-	localNotification.fireDate = [NSDate dateWithTimeIntervalSinceReferenceDate:ESTime::sysTimeForNTPTime(alarmTime->currentTime())];
-	//printf("Setting up local notification at iPhone time %s\n",
-	//       [[localNotification.fireDate description] UTF8String]);
-	localNotification.soundName = @"Chime10.wav";
-	localNotification.alertBody = [NSString stringWithFormat:@"%@ %@",
-                                       NSLocalizedString(@"Alarm:", @"label for enable alarm clock switch"),
-                                       NSLocalizedString(@"Observatory", @"App display name")];
-	[app scheduleLocalNotification:localNotification];
-    }	
+    // Repeat daily at the alarm's local wall-clock time, as measured by the device clock
+    ESDateComponents cs;
+    ESCalendar_localDateComponentsFromTimeInterval(ESTime::sysTimeForNTPTime(alarmTime->currentTime()), ESCalendar_localTimeZone(), &cs);
+    NSDateComponents *fireComponents = [[[NSDateComponents alloc] init] autorelease];
+    fireComponents.hour = cs.hour;
+    fireComponents.minute = cs.minute;
+    fireComponents.second = (NSInteger)floor(cs.seconds);
+    //printf("Setting up local notification at iPhone time %02d:%02d:%02d\n", cs.hour, cs.minute, (int)floor(cs.seconds));
+    UNCalendarNotificationTrigger *trigger = [UNCalendarNotificationTrigger triggerWithDateMatchingComponents:fireComponents repeats:YES];
+
+    UNMutableNotificationContent *content = [[[UNMutableNotificationContent alloc] init] autorelease];
+    content.sound = [UNNotificationSound soundNamed:@"Chime10.wav"];
+    content.body = [NSString stringWithFormat:@"%@ %@",
+			     NSLocalizedString(@"Alarm:", @"label for enable alarm clock switch"),
+			     NSLocalizedString(@"Observatory", @"App display name")];
+
+    UNNotificationRequest *request = [UNNotificationRequest requestWithIdentifier:kEOAlarmNotificationIdentifier content:content trigger:trigger];
+    [center addNotificationRequest:request withCompletionHandler:nil];
 }
 
 /*
@@ -292,54 +285,54 @@ static UILocalNotification *localNotification;
 	}
 
 	// First-run quick-start alert part 2 of 2 start
-	firstVersionRun = [defaults objectForKey:@"EOFirstVersionRun"];
-	thisVersion = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleVersion"];
-	//printf("this version %s\n", [thisVersion UTF8String]);
-	if (!firstVersionRun) {
-	    // NB from Steve 7 Dec 2010 -- the following block of code doesn't do what it wants to do; it wants to find a pref
-	    // that doesn't exist if the user hasn't run any version of EO at all, but which does exist if the user has
-	    // run an older (1.0 or 1.1) version.  But unfortunately at this point in the code flow, setupDefaults has
-	    // been called in the app delegate and the given pref will always exist even if this is a first run.  Thus
-	    // no one will be a newbie as we interpret it.
-
-	    // See if this user has run EO before.
-	    NSString *initString = [defaults objectForKey:@"EOUseNTP"];		// this pref has existed since Day One
-	    if (initString) {
-		firstVersionRun = @"1.1";  // The last version which didn't set EOFirstVersionRun, in case that isn't set
-	    } else {
-		firstVersionRun = thisVersion;
-	    }
-	    [defaults setObject:firstVersionRun forKey:@"EOFirstVersionRun"];
-	    [defaults synchronize];
-	}
-	//printf("firstVersionRun version %s\n", [firstVersionRun UTF8String]);
-	isNewbie = [firstVersionRun compare:thisVersion] == NSOrderedSame;
-	shouldShowQuickStart = false;
-	NSString *lastVersion = [defaults objectForKey:@"EOVersionMsg"];
-	//printf("lastVersion %s\n", [lastVersion UTF8String]);
-	if (lastVersion) {
-	    if (thisVersion) {
-		if ([thisVersion compare:lastVersion] != NSOrderedSame) {
-                    if ([thisVersion compare:@"1.4.1"] == NSOrderedSame &&
-                        ([lastVersion compare:@"1.4"] == NSOrderedSame ||
-                         [lastVersion compare:@"1.3.8"] == NSOrderedSame ||
-                         [lastVersion compare:@"1.3.7"] == NSOrderedSame ||
-                         [lastVersion compare:@"1.3.6"] == NSOrderedSame ||
-                         [lastVersion compare:@"1.3.5"] == NSOrderedSame ||
-                         [lastVersion compare:@"1.3.4"] == NSOrderedSame ||
-                         [lastVersion compare:@"1.3.3"] == NSOrderedSame ||
-                         [lastVersion compare:@"1.3.2"] == NSOrderedSame ||
-                         [lastVersion compare:@"1.3.1"] == NSOrderedSame ||
-                         [lastVersion compare:@"1.3"] == NSOrderedSame)) {
-                        // skip equivalent upgrade(s)
-                    } else {
-                        shouldShowQuickStart = true;
-                    }
-		}
-	    }
-	} else {
-	    shouldShowQuickStart = true;
-	}
+//	firstVersionRun = [defaults objectForKey:@"EOFirstVersionRun"];
+//	thisVersion = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleVersion"];
+//	//printf("this version %s\n", [thisVersion UTF8String]);
+//	if (!firstVersionRun) {
+//	    // NB from Steve 7 Dec 2010 -- the following block of code doesn't do what it wants to do; it wants to find a pref
+//	    // that doesn't exist if the user hasn't run any version of EO at all, but which does exist if the user has
+//	    // run an older (1.0 or 1.1) version.  But unfortunately at this point in the code flow, setupDefaults has
+//	    // been called in the app delegate and the given pref will always exist even if this is a first run.  Thus
+//	    // no one will be a newbie as we interpret it.
+//
+//	    // See if this user has run EO before.
+//	    NSString *initString = [defaults objectForKey:@"EOUseNTP"];		// this pref has existed since Day One
+//	    if (initString) {
+//		firstVersionRun = @"1.1";  // The last version which didn't set EOFirstVersionRun, in case that isn't set
+//	    } else {
+//		firstVersionRun = thisVersion;
+//	    }
+//	    [defaults setObject:firstVersionRun forKey:@"EOFirstVersionRun"];
+//	    [defaults synchronize];
+//	}
+//	//printf("firstVersionRun version %s\n", [firstVersionRun UTF8String]);
+//	isNewbie = [firstVersionRun compare:thisVersion] == NSOrderedSame;
+//	shouldShowQuickStart = false;
+//	NSString *lastVersion = [defaults objectForKey:@"EOVersionMsg"];
+//	//printf("lastVersion %s\n", [lastVersion UTF8String]);
+//	if (lastVersion) {
+//	    if (thisVersion) {
+//		if ([thisVersion compare:lastVersion] != NSOrderedSame) {
+//                    if ([thisVersion compare:@"1.4.1"] == NSOrderedSame &&
+//                        ([lastVersion compare:@"1.4"] == NSOrderedSame ||
+//                         [lastVersion compare:@"1.3.8"] == NSOrderedSame ||
+//                         [lastVersion compare:@"1.3.7"] == NSOrderedSame ||
+//                         [lastVersion compare:@"1.3.6"] == NSOrderedSame ||
+//                         [lastVersion compare:@"1.3.5"] == NSOrderedSame ||
+//                         [lastVersion compare:@"1.3.4"] == NSOrderedSame ||
+//                         [lastVersion compare:@"1.3.3"] == NSOrderedSame ||
+//                         [lastVersion compare:@"1.3.2"] == NSOrderedSame ||
+//                         [lastVersion compare:@"1.3.1"] == NSOrderedSame ||
+//                         [lastVersion compare:@"1.3"] == NSOrderedSame)) {
+//                        // skip equivalent upgrade(s)
+//                    } else {
+//                        shouldShowQuickStart = true;
+//                    }
+//		}
+//	    }
+//	} else {
+//	    shouldShowQuickStart = true;
+//	}
 	// First-run quick-start alert part 2 of 2 end
 
         // set up alarm
@@ -366,8 +359,9 @@ static UILocalNotification *localNotification;
         [self adjustAlarmTime];
 	[EOClock setupLocalNotificationForAlarmStateEnabled:[[NSUserDefaults standardUserDefaults] boolForKey:@"EOAlarmEnabled"]];
 
-	centerX = [UIScreen mainScreen].applicationFrame.size.width/2;
-	centerY = [UIScreen mainScreen].applicationFrame.size.height/2;
+	// Not applicationFrame: with the UIScene life cycle it has a NaN height until a window scene connects
+	centerX = [UIScreen mainScreen].bounds.size.width/2;
+	centerY = [UIScreen mainScreen].bounds.size.height/2;
 	lastOrientation = (UIInterfaceOrientation)UIDeviceOrientationUnknown;
 	subviews = [[NSMutableArray alloc] initWithCapacity:40];
 	dateFormatter = [[NSDateFormatter alloc] init];
@@ -2232,9 +2226,9 @@ static bool localeIsCyrillic() {
 	[self reorientSubView:eotDialView toOrientation:newOrientation offsetBy:CGPointMake(EOTX, EOTY)];
 	[self reorientSubView:earthBackView toOrientation:newOrientation offsetBy:CGPointMake(BMX, BMY)];
 
-	[self reorientSubView:utcdayLabel toOrientation:newOrientation offsetBy:CGPointMake(utcdayX, utcdayY+(UIDeviceOrientationIsLandscape(newOrientation)?3
+	[self reorientSubView:utcdayLabel toOrientation:newOrientation offsetBy:CGPointMake(utcdayX, utcdayY+(UIInterfaceOrientationIsLandscape(newOrientation)?3
                                                                                                               :0))];
-	[self reorientSubView:tzLabel toOrientation:newOrientation offsetBy:CGPointMake(tzX, tzY+(UIDeviceOrientationIsLandscape(newOrientation)?6:0))];
+	[self reorientSubView:tzLabel toOrientation:newOrientation offsetBy:CGPointMake(tzX, tzY+(UIInterfaceOrientationIsLandscape(newOrientation)?6:0))];
 	[self reorientSubView:NTPStatusLabel toOrientation:newOrientation offsetBy:CGPointMake(NTPStatusX, NTPStatusY)];
         [self reorientSubView:NTPStatusBut toOrientation:newOrientation offsetBy:CGPointMake(NTPStatusX, NTPStatusY)];
         
@@ -2461,7 +2455,9 @@ static bool localeIsCyrillic() {
 	    [v resetTarget];
 	}
     }
-    [UIApplication sharedApplication].statusBarHidden = false;
+    // Not [UIApplication setStatusBarHidden:], which is a no-op as of iOS 27; the view controller owns this now
+    OrreryAppDelegate *appDelegate = (OrreryAppDelegate *)[[UIApplication sharedApplication] delegate];
+    appDelegate.mainViewController.statusBarHidden = false;
     dateLabel.hidden = true;
 }
 

@@ -13,7 +13,6 @@
 
 #define EOSCREENWIDTH      768
 #define EOSCREENHEIGHT	  1024
-#define EOCURRENTSTATUSBARHEIGHT ([UIApplication sharedApplication].statusBarFrame.size.height)
 #define EOSTATICSTATUSBARHEIGHT 20
 
 class ESTimeLocAstroEnvironment;

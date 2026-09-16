@@ -21,11 +21,13 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.5.5</string>
+	<string>1.6</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleVersion</key>
-	<string>1.5.5</string>
+	<string>1.6</string>
+	<key>EOWebSiteURL</key>
+	<string>https://bjornfreemanbenson.com/emerald-observatory</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSHasLocalizedDisplayName</key>
@@ -34,8 +36,23 @@
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Locations are used for astronomical calculations.</string>
-	<key>NSMainNibFile~ipad</key>
-	<string>MainWindow-iPad</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>Default Configuration</string>
+					<key>UISceneDelegateClassName</key>
+					<string>OrrerySceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>UILaunchImages~ipad</key>
 	<array>
 		<dict>
@@ -89,6 +106,11 @@
 			<string>{2048, 2732}</string>
 		</dict>
 	</array>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
 	<key>UIPrerenderedIcon</key>
 	<true/>
 	<key>UIRequiresFullScreen</key>

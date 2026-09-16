@@ -15,7 +15,8 @@ int main(int argc, char *argv[]) {
     NSAutoreleasePool * pool = [[NSAutoreleasePool alloc] init];
     //ESCalendar_init();
     ESTime::startOfMain("Obs");
-    int retVal = UIApplicationMain(argc, argv, nil, nil);
+    // The app delegate used to come from MainWindow-iPad.xib; with the UIScene life cycle it must be named here
+    int retVal = UIApplicationMain(argc, argv, nil, @"OrreryAppDelegate");
     [pool release];
     return retVal;
 }
