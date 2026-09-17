@@ -2211,9 +2211,10 @@ static bool localeIsCyrillic() {
 // Can be placed in an animation block...
 - (void)moveClockWidgetsForOrientation:(UIInterfaceOrientation)newOrientation newSize:(CGSize)newSize {
     // now get all parts to update themselves to the new orientation
-    if (newOrientation != lastOrientation) {
-        double newCenterX = newSize.width / 2;
-        double newCenterY = newSize.height / 2;
+    double newCenterX = newSize.width / 2;
+    double newCenterY = newSize.height / 2;
+    // A window can change shape without changing orientation, which moves the center
+    if (newOrientation != lastOrientation || newCenterX != centerX || newCenterY != centerY) {
         printf("moveClockWidgets center %f %f\n", newCenterX, newCenterY);
 	centerX = newCenterX;
 	centerY = newCenterY;

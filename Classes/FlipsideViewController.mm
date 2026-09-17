@@ -137,6 +137,20 @@ static NSDateFormatter	*dateFormatter, *alarmTimeFormatter;
 				   bounds.origin.y + safeArea.top,
 				   bounds.size.width,
 				   bounds.size.height - safeArea.top - safeArea.bottom);
+    [self styleSwitchesIn:self.view];
+}
+
+// The default off-state track is nearly invisible against our black background, so give every switch a visible gray fill.
+// Walk the view tree rather than using the outlets, since not every switch is connected in every nib.
+- (void)styleSwitchesIn:(UIView *)view {
+    if ([view isKindOfClass:[UISwitch class]]) {
+	view.backgroundColor = [UIColor colorWithWhite:0.4 alpha:1];
+	view.layer.cornerRadius = view.bounds.size.height / 2;
+	return;
+    }
+    for (UIView *subview in view.subviews) {
+	[self styleSwitchesIn:subview];
+    }
 }
 
 - (void)viewWillDisappear:(BOOL)animated {

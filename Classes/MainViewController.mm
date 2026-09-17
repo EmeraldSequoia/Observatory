@@ -26,6 +26,12 @@
 - (void)viewDidLoad {
     traceEnter("viewDidLoad");
     [super viewDidLoad];
+    baseView.autoresizingMask = UIViewAutoresizingNone;  // scaleBaseViewToSize: sizes it instead
+    // Running on a Mac, the info button's template image isn't drawn when the view first appears (only after the
+    // Options screen has been presented and dismissed), so give it an image that already has its color
+    UIImage *infoImage = [[UIImage systemImageNamed:@"info.circle"] imageWithTintColor:[UIColor systemBlueColor]
+                                                                         renderingMode:UIImageRenderingModeAlwaysOriginal];
+    [infoButton1 setImage:infoImage forState:UIControlStateNormal];
     [baseView setOrientation:[self interfaceOrientation]];
     [Utilities setNewOrientation:[self interfaceOrientation]];
     [[EOClock theClock] clockSetup:baseView orientation:[self interfaceOrientation]];
@@ -55,7 +61,7 @@
 	[(id)baseView setNeedsDisplay];
     }
     [Utilities setNewOrientation:interfaceOrientation];
-    CGSize newSize = [UIScreen mainScreen].bounds.size;
+    CGSize newSize = [self scaleBaseViewToSize:self.view.bounds.size orientation:interfaceOrientation];
     [[EOClock theClock] resetAfterOrientationChangeToOrientation:interfaceOrientation newSize:newSize];
     traceExit ("viewWillAppear");
 }
@@ -127,10 +133,80 @@ static UIInterfaceOrientation interfaceOrientationForSize(CGSize size) {
     }
 }
 
+static void setContentScaleFactor(UIView *view, CGFloat contentScaleFactor) {
+    if (view.contentScaleFactor != contentScaleFactor) {
+        view.contentScaleFactor = contentScaleFactor;
+        [view setNeedsDisplay];
+    }
+    for (UIView *subview in view.subviews) {
+        setContentScaleFactor(subview, contentScaleFactor);
+    }
+}
+
+// EOClock lays the clock out on a fixed canvas (EOSCREENWIDTH x EOSCREENHEIGHT, turned sideways in landscape), so on
+// a larger window it would sit in the middle surrounded by black.  Instead scale baseView up (or down) so the canvas
+// fills the safe area (clear of the status bar and home indicator), and return baseView's size in canvas units, which is
+// what EOClock should lay out in.
+- (CGSize)scaleBaseViewToSize:(CGSize)size orientation:(UIInterfaceOrientation)orientation {
+    bool landscape = UIInterfaceOrientationIsLandscape(orientation);
+    CGFloat canvasWidth  = landscape ? EOSCREENHEIGHT : EOSCREENWIDTH;
+    CGFloat canvasHeight = landscape ? EOSCREENWIDTH  : EOSCREENHEIGHT;
+    UIEdgeInsets safeArea = self.view.safeAreaInsets;
+    // Set mode (and screen mirroring) hide the status bar, which shrinks the top inset; keep the room the status bar
+    // took so the clock doesn't grow while it's hidden.  (A visible status bar can briefly report 0 while it reappears.)
+    if (!statusBarHidden && safeArea.top > 0) {
+        statusBarSafeAreaTop = safeArea.top;
+    }
+    safeArea.top = MAX(safeArea.top, statusBarSafeAreaTop);
+    CGFloat safeWidth  = size.width  - safeArea.left - safeArea.right;
+    CGFloat safeHeight = size.height - safeArea.top  - safeArea.bottom;
+    CGFloat scale = MIN(safeWidth / canvasWidth, safeHeight / canvasHeight);
+    if (!(scale > 0)) {  // not laid out yet
+        scale = 1;
+    }
+    // Round up to even sizes so the center is on a whole point, as it is for an unscaled window.  Otherwise square
+    // views like EOEclipseView round out to non-square frames (and assert).  Rounding up rather than down means any
+    // leftover fraction hangs off the edge of the window rather than leaving a sliver of black.
+    CGSize canvasSize = CGSizeMake(2 * ceil(size.width / scale / 2), 2 * ceil(size.height / scale / 2));
+    // baseView still covers the whole window, but EOClock centers the clock in baseView, so shift baseView's contents
+    // to put that center in the middle of the safe area instead.  Whole canvas units, for the same reason as above.
+    CGFloat shiftX = round((safeArea.left - safeArea.right) / 2 / scale);
+    CGFloat shiftY = round((safeArea.top - safeArea.bottom) / 2 / scale);
+    baseView.transform = CGAffineTransformIdentity;
+    baseView.bounds = CGRectMake(-shiftX, -shiftY, canvasSize.width, canvasSize.height);
+    baseView.center = CGPointMake(size.width / 2, size.height / 2);
+    baseView.transform = CGAffineTransformMakeScale(scale, scale);
+
+    // Render at the scaled-up resolution rather than stretching the normal-resolution drawing
+    CGFloat displayScale = self.traitCollection.displayScale;
+    if (!(displayScale > 0)) {
+        displayScale = [UIScreen mainScreen].scale;
+    }
+    setContentScaleFactor(baseView, displayScale * scale);
+
+    lastLayoutSize = size;
+    lastLayoutSafeArea = self.view.safeAreaInsets;  // as reported, for viewDidLayoutSubviews to compare against
+    return canvasSize;
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    // Resizing a window (on a Mac or in iPadOS windowing) doesn't necessarily come through viewWillTransitionToSize:
+    if (!CGSizeEqualToSize(self.view.bounds.size, lastLayoutSize) ||
+        !UIEdgeInsetsEqualToEdgeInsets(self.view.safeAreaInsets, lastLayoutSafeArea)) {
+        UIInterfaceOrientation newOrientation = interfaceOrientationForSize(self.view.bounds.size);
+        [baseView setOrientation:newOrientation];
+        [(id)baseView setNeedsDisplay];
+        [Utilities setNewOrientation:newOrientation];
+        [self updateLayoutAfterRotationToSize:self.view.bounds.size];
+    }
+}
+
 - (void) updateLayoutAfterRotationToSize:(CGSize)size {
     traceEnter("updateLayoutAfterRotationToSize");
     UIInterfaceOrientation newOrientation = interfaceOrientationForSize(size);
-    [[EOClock theClock] resetAfterOrientationChangeToOrientation:newOrientation newSize:size];
+    CGSize canvasSize = [self scaleBaseViewToSize:size orientation:newOrientation];
+    [[EOClock theClock] resetAfterOrientationChangeToOrientation:newOrientation newSize:canvasSize];
     //printf("updateLayoutAfterRotationToSize Button 1 position %f %f\n", infoButton1.frame.origin.x, infoButton1.frame.origin.y);
     //printf("updateLayoutAfterRotationToSize Button 2 position %f %f\n", infoButton2.frame.origin.x, infoButton2.frame.origin.y);
     traceExit("updateLayoutAfterRotationToSize");

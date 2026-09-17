@@ -15,6 +15,9 @@
     IBOutlet UIButton *infoButton1;
     IBOutlet UIButton *infoButton2;
     bool                statusBarHidden;
+    CGSize              lastLayoutSize;
+    UIEdgeInsets        lastLayoutSafeArea;
+    CGFloat             statusBarSafeAreaTop;
 }
 
 @property(readonly) EOBaseView *baseView;

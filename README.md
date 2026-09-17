@@ -2,7 +2,7 @@
 
 ## Overview
 
-This directory contains code for the iOS "Emerald Observatory" app. (Code for the web version of Observatory
+This directory contains code for [the iOS "Emerald Observatory" app](https://apps.apple.com/us/app/emerald-observatory-for-ipad/id364904759). (Code for the web version of Observatory
 is contained within the [chronometer-web](https://github.com/EmeraldSequoia/chronometer-web) repository).
 
 ## Dependencies
@@ -33,7 +33,8 @@ if you have set up your Xcode development profiles, a device) and select Product
 
 ## Versioning
 
-TBD
+* 1.6.1 has a few UI bugs fixed
+* 1.6 is this open-sourced code newly re-released in the App Store under [new stewardship](https://bjornfreemanbenson.com/emerald-observatory)
 
 ## Links to Emerald Sequoia website
 

@@ -6,18 +6,13 @@ my $src = "$ENV{SRCROOT}/Resources/help.txt";
 my $dest = "$ENV{BUILT_PRODUCTS_DIR}/$ENV{PRODUCT_NAME}.app/help.txt";
 
 # Version line substituted for EMERALD_VERSION_STRING in help.txt.  recordSVNVersion.pl used to do this
-# from the git version, but it disables itself for GitHub builds, so take the version from the Info.plist.
-sub plistValue {
-    my $key = shift;
-    my $plist = "$ENV{SRCROOT}/$ENV{PRODUCT_NAME}-Info.plist";
-    chomp(my $value = `/usr/libexec/PlistBuddy -c "Print :$key" "$plist" 2>/dev/null`);
-    return $value;
-}
-
-my $shortVersion = plistValue "CFBundleShortVersionString";
-my $bundleVersion = plistValue "CFBundleVersion";
+# from the git version, but it disables itself for GitHub builds.  The Info.plist just refers to the
+# MARKETING_VERSION and CURRENT_PROJECT_VERSION build settings (the target's Version and Build fields),
+# and Xcode passes build settings to script phases in the environment, so take them from there.
+my $shortVersion = $ENV{MARKETING_VERSION};
+my $bundleVersion = $ENV{CURRENT_PROJECT_VERSION};
 $shortVersion
-  or die "Couldn't read CFBundleShortVersionString from $ENV{PRODUCT_NAME}-Info.plist\n";
+  or die "MARKETING_VERSION is not set; set the target's Version in Xcode\n";
 if (!$bundleVersion) {
     $bundleVersion = $shortVersion;
 }

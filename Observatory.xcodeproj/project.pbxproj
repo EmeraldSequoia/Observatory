@@ -1169,7 +1169,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_OPTIMIZATION_LEVEL = 0;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
@@ -1181,7 +1181,7 @@
 					"$(inherited)",
 					"\"$(SRCROOT)\"",
 				);
-				MARKETING_VERSION = 1.6;
+				MARKETING_VERSION = 1.6.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.emeraldsequoia.${PRODUCT_NAME:rfc1034identifier}";
 				PRODUCT_NAME = Observatory;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1198,7 +1198,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = YES;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = Observatory_Prefix.pch;
 				GCC_PREPROCESSOR_DEFINITIONS = (
@@ -1212,7 +1212,7 @@
 					"$(inherited)",
 					"\"$(SRCROOT)\"",
 				);
-				MARKETING_VERSION = 1.6;
+				MARKETING_VERSION = 1.6.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.emeraldsequoia.${PRODUCT_NAME:rfc1034identifier}";
 				PRODUCT_NAME = Observatory;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1280,7 +1280,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = YES;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = Observatory_Prefix.pch;
 				GCC_PREPROCESSOR_DEFINITIONS = (
@@ -1294,7 +1294,7 @@
 					"$(inherited)",
 					"\"$(SRCROOT)\"",
 				);
-				MARKETING_VERSION = 1.6;
+				MARKETING_VERSION = 1.6.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.emeraldsequoia.${PRODUCT_NAME:rfc1034identifier}";
 				PRODUCT_NAME = Observatory;
 				PROVISIONING_PROFILE_SPECIFIER = "";
