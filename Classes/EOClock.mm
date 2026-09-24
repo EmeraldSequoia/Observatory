@@ -41,6 +41,8 @@
 #import "ESCalendar.hpp"
 #import "ESErrorReporter.hpp"
 #import "ESLocation.hpp"
+#import "ESGeoNames.hpp"
+#import "EOLocationPickerViewController.h"
 #undef ECTRACE
 #import "ECTrace.h"
 
@@ -337,6 +339,10 @@ static NSString *const kEOAlarmNotificationIdentifier = @"EOAlarm";
 
         // set up alarm
 	time = new ESWatchTime;
+	NSString *manualTZ = [[NSUserDefaults standardUserDefaults] stringForKey:@"EOManualTimeZone"];
+	if (manualTZ) {
+	    ESCalendar_setLocalTimeZone([manualTZ UTF8String]);
+	}
 	env = new ESTimeLocAstroEnvironment(ESCalendar_localTimeZoneName().c_str(), true/*observingIPhoneTime*/);
 	ESTimeZone *estz = env->estz();
 	ESDateComponents today;
@@ -375,6 +381,7 @@ static NSString *const kEOAlarmNotificationIdentifier = @"EOAlarm";
 	utcDateFormatter = [[NSDateFormatter alloc] init];
 	[utcDateFormatter setDateFormat:@"EEE dd"];
 	[utcDateFormatter setTimeZone:[NSTimeZone timeZoneWithAbbreviation:@"UTC"]];
+	[self useLocalTimeZoneInFormatters];
 	sanityTimer = [NSTimer scheduledTimerWithTimeInterval:60 target:self selector:@selector(checkSanityHereAndNow:) userInfo:NULL repeats:NO];
 
         ESLocation *location = env->location();
@@ -662,12 +669,63 @@ static bool firstAfterComingToForeground = true;
     }
 }
 
-- (void)resetTZ {
-    ESCalendar_localTimeZoneChanged();	// resets to device's current zone
+- (void)useLocalTimeZoneInFormatters {
+    NSTimeZone *nsTZ = ESCalendar_nsTimeZone(ESCalendar_localTimeZone());
+    [dateFormatter setTimeZone:nsTZ];
+    [tzFormatter setTimeZone:nsTZ];
+    [bigDateFormatter setTimeZone:nsTZ];
+    [bigDate2Formatter setTimeZone:nsTZ];
+}
+
+// Call after changing ESCalendar's local time zone
+- (void)useLocalTimeZone {
     env->setTimeZone(ESCalendar_localTimeZone());
-    [tzFormatter setTimeZone:ESCalendar_nsTimeZone(ESCalendar_localTimeZone())];
+    [self useLocalTimeZoneInFormatters];
+}
+
+- (void)resetTZ {
+    NSString *manualTZ = [[NSUserDefaults standardUserDefaults] stringForKey:@"EOManualTimeZone"];
+    if (manualTZ) {
+	ESCalendar_setLocalTimeZone([manualTZ UTF8String]);  // the zone of a location picked on the map
+    } else {
+	ESCalendar_localTimeZoneChanged();	// resets to device's current zone
+    }
+    [self useLocalTimeZone];
     lastWarnedTZ = NULL;
     lastWarnedLong = -200;
+}
+
+- (void)setManualLocationLatitude:(double)latitudeDegrees longitude:(double)longitudeDegrees {
+    // Use the time zone of the nearest city
+    ESGeoNames geoNames;
+    geoNames.findClosestCityToLatitudeDegrees(latitudeDegrees, longitudeDegrees);
+    std::string tzName = geoNames.selectedCityTZName();
+    if (!tzName.empty()) {
+	[[NSUserDefaults standardUserDefaults] setObject:[NSString stringWithUTF8String:tzName.c_str()] forKey:@"EOManualTimeZone"];
+    } else {
+	[[NSUserDefaults standardUserDefaults] removeObjectForKey:@"EOManualTimeZone"];  // fall back to the device's zone
+    }
+    [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"EOUseLocationServices"];
+    [self resetTZ];
+    env->location()->setToUserLocation(latitudeDegrees, longitudeDegrees, 0/*accuracyInMeters*/);	// must be after setting of timezone
+}
+
+- (void)resumeLocationServices {
+    [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"EOManualTimeZone"];
+    [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"EOUseLocationServices"];
+    [self resetTZ];
+    env->location()->setToDevice();
+}
+
+- (void)earthViewTapped:(UITapGestureRecognizer *)recognizer {
+    OrreryAppDelegate *appDelegate = (OrreryAppDelegate *)[[UIApplication sharedApplication] delegate];
+    MainViewController *mainViewController = appDelegate.mainViewController;
+    if (!mainViewController || mainViewController.presentedViewController) {
+	return;
+    }
+    EOLocationPickerViewController *picker = [[EOLocationPickerViewController alloc] init];
+    [mainViewController presentViewController:picker animated:YES completion:NULL];
+    [picker release];
 }
 
 - (void)buttonActionDn:(id)sender {
@@ -870,8 +928,7 @@ static bool firstAfterComingToForeground = true;
 	}
 	++demoCycle;
 	ESCalendar_setLocalTimeZone(newTzName);
-	env->setTimeZone(ESCalendar_localTimeZone());
-	[tzFormatter setTimeZone:ESCalendar_nsTimeZone(ESCalendar_localTimeZone())];
+	[self useLocalTimeZone];
         env->location()->setToUserLocation(newLat, newLng, 0/*accuracyInMeters*/);
 	ESTimeInterval t = ESCalendar_timeIntervalFromLocalDateComponents(ESCalendar_localTimeZone(), &comps);
 	time->setToFrozenDateInterval(t);
@@ -988,6 +1045,9 @@ static NSTimer *sanityTimer = NULL;
 	[[ECErrorReporter theErrorReporter] reportWarning:[NSString stringWithFormat:NSLocalizedString(@"Your location\n\n%@\n\nappears to be invalid.  Turn 'Use Location Services' ON or enter a valid latitude and longitude.", @"Invalid location warning message"),
                                                            ESLocationAsString(env->location())]];
 	return;
+    }
+    if ([[NSUserDefaults standardUserDefaults] stringForKey:@"EOManualTimeZone"]) {
+	return;  // the zone was looked up from the location picked on the map, so it's right even if far from its center
     }
     ESTimeInterval now = ESTime::currentTime();
     if (fabs(ESTime::skewForReportingPurposesOnly()) > TOOBIGSKEW || (fabs(lng - lastWarnedLong) < 1.0 && tz == lastWarnedTZ)) {
@@ -1916,6 +1976,10 @@ static bool localeIsCyrillic() {
     [self addSubview:earthView];
     [self reorientSubView:earthView toOrientation:lastOrientation offsetBy:CGPointMake(BMX, BMY)];  // This shouldn't be necessary, but it is
     [self resizeSubView:earthView masterScale:earthMasterScale];
+    earthView.userInteractionEnabled = true;
+    UITapGestureRecognizer *earthTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(earthViewTapped:)];
+    [earthView addGestureRecognizer:earthTap];
+    [earthTap release];
     hourBut  = [self createButtonAtX:advButtonX + advHourButtonOffsetX Y:advButtonY width:advButtonWidth height:advButtonHeight highlight:true text:NSLocalizedString(@"hour", @"short abbreviation for hour") color:fwdColor];
     hourButB  = [self createButtonAtX:advButtonX + backHourButtonOffsetX Y:advButtonY width:advButtonWidth height:advButtonHeight highlight:true text:NSLocalizedString(@"hour", @"short abbreviation for hour") color:bckColor];
     

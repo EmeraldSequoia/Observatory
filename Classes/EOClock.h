@@ -197,6 +197,8 @@ class ClockTimeSyncObserver;
 - (void)setStatusBar:(NSNotification *)notif;
 - (void)resetTargets;
 - (void)resetTZ;
+- (void)setManualLocationLatitude:(double)latitudeDegrees longitude:(double)longitudeDegrees;  // and that location's time zone
+- (void)resumeLocationServices;
 - (void)locationUpdate;
 - (void)checkSanityForTimezone:(ESTimeZone *)tz latitude:(double)lat longitude:(double)lng;
 - (void)showQuickStartIfNecessaryInView:(UIView *)parentView;

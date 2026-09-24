@@ -300,7 +300,7 @@ static NSTimer *alarmTestButtonTimer = nil;
 	[[NSUserDefaults standardUserDefaults] setBool:ULSSwitch.on forKey:@"EOUseLocationServices"];
         ESLocation *location = [[EOClock theClock] env]->location();
 	if (ULSSwitch.on) {
-            location->setToDevice();
+            [[EOClock theClock] resumeLocationServices];  // also drops any time zone picked with the location on the map
 	    [self setLabels];
 	} else {
             location->setToUserLocationAtLastLocation();
@@ -332,6 +332,11 @@ static NSTimer *alarmTestButtonTimer = nil;
 	lat = fmin(90, fmax(-90, lat));
 	double lng = [longField.text floatValue];
 	lng = fmin(180, fmax(-180, lng));
+        if ([[NSUserDefaults standardUserDefaults] stringForKey:@"EOManualTimeZone"]) {
+            // Typed coordinates use the device's time zone, not one picked with an earlier location on the map
+            [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"EOManualTimeZone"];
+            [[EOClock theClock] resetTZ];
+        }
         [[EOClock theClock] env]->location()->setToUserLocation(lat, lng, 0/*accuracyInMeters*/);
     }
     [textField resignFirstResponder];

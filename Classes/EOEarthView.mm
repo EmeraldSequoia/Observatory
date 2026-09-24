@@ -46,14 +46,16 @@
 #define YToLat(y) ((  90 - (y)*180./length) * twoPi/360)
 #define XToLng(x) ((-180 + (x)*360./width ) * twoPi/360)
 
-- (void)drawBoundaryForAltitude:(double)altitude
-		    minAltitude:(double)minAltitude
-		    maxAltitude:(double)maxAltitude
-			  alpha:(double)alpha
-			context:(CGContextRef)context
-	      subSolarLongitude:(double)subSolarLongitude
-	       subSolarLatitude:(double)subSolarLatitude
-		     borderOnly:(bool)borderOnly {
+static void drawBoundaryForAltitude(double altitude,
+				    double minAltitude,
+				    double maxAltitude,
+				    double alpha,
+				    CGContextRef context,
+				    double subSolarLongitude,
+				    double subSolarLatitude,
+				    bool borderOnly,
+				    double width,
+				    double length) {
 
     const double cossslat = cos(subSolarLatitude);
     const double sinsslat = sin(subSolarLatitude);
@@ -153,18 +155,20 @@
     }
 }
 
-- (void)drawBoundariesForAltitudeIntoContext:(CGContextRef)context
-				 minAltitude:(double)minAltitude
-				 maxAltitude:(double)maxAltitude
-			       numBoundaries:(int)numBoundaries
-			   subSolarLongitude:(double)subSolarLongitude
-			    subSolarLatitude:(double)subSolarLatitude 
-				  borderOnly:(bool)borderOnly {
+static void drawBoundariesForAltitudeIntoContext(CGContextRef context,
+						 double minAltitude,
+						 double maxAltitude,
+						 int numBoundaries,
+						 double subSolarLongitude,
+						 double subSolarLatitude,
+						 bool borderOnly,
+						 double width,
+						 double length) {
     traceEnter("EOEarthView: drawBoundaries");
     assert(numBoundaries > 0);
     if (numBoundaries == 1) {
 	assert(minAltitude == maxAltitude);
-	[self drawBoundaryForAltitude:minAltitude minAltitude:minAltitude maxAltitude:maxAltitude alpha:0.5 context:context subSolarLongitude:subSolarLongitude subSolarLatitude:subSolarLatitude borderOnly:borderOnly];
+	drawBoundaryForAltitude(minAltitude, minAltitude, maxAltitude, 0.5, context, subSolarLongitude, subSolarLatitude, borderOnly, width, length);
     }
     double altitudeIncrement = (maxAltitude - minAltitude) / (numBoundaries - 1);
     // draw maximum altitude first, because it has the biggest area (the shape surrounds the night region)
@@ -174,38 +178,18 @@
 	CGContextSetBlendMode(context, kCGBlendModeDestinationOut);
     }
     for(double altitude = maxAltitude; altitude >= minAltitude - .0001; altitude -= altitudeIncrement, alpha += alphaIncrement) {
-	[self drawBoundaryForAltitude:altitude minAltitude:minAltitude maxAltitude:maxAltitude alpha:alpha context:context subSolarLongitude:subSolarLongitude subSolarLatitude:subSolarLatitude borderOnly:borderOnly];
+	drawBoundaryForAltitude(altitude, minAltitude, maxAltitude, alpha, context, subSolarLongitude, subSolarLatitude, borderOnly, width, length);
     }
     CGContextSetBlendMode(context, kCGBlendModeNormal);
     traceExit("EOEarthView: drawBoundaries");
 }
     
-- (void)drawRect:(CGRect)rect {
-    traceEnter("EOEarthView: drawRect");
-    //printf("    EOEarthView frame  %6.2f, %6.2f   %6.2f x %6.2f\n", self.frame.origin.x, self.frame.origin.y, self.frame.size.width, self.frame.size.height);
-    //printf("    EOEarthView bounds %6.2f, %6.2f   %6.2f x %6.2f\n", self.bounds.origin.x, self.bounds.origin.y, self.bounds.size.width, self.bounds.size.height);
-    CGContextRef context = UIGraphicsGetCurrentContext();
-    CGContextSaveGState(context);
-
-    setupContextForZeroOffsetAndScale(context, &zeroOffset, masterScale);
-
-    // get the image for this month
-    int thisMonth = tim->monthNumberUsingEnv(env);
-    if (monthLoaded != thisMonth) {
-	//tracePrintf1("loading earth image for %d\n", thisMonth+1);
-	[img release];
-	img = [[Utilities imageFromResource:[NSString stringWithFormat:@"%02d.png", thisMonth+1]] retain];
-	assert(img);
-	assert(img.size.width == width && img.size.height == length);
-	monthLoaded = thisMonth;
-    }
-
-    CGContextScaleCTM(context, 1, -1);
+void EODrawEarthMap(CGContextRef context, UIImage *img, double width, double length, double markScale,
+		    ESWatchTime *tim, ESTimeLocAstroEnvironment *env) {
     tracePrintf("EOEarthView: drawInRect start");
-    [img drawInRect:CGRectMake(-width/2,-length/2,width,length)];
+    [img drawInRect:CGRectMake(0, 0, width, length)];
     tracePrintf("EOEarthView: drawInRect done");
     //tracePrintf("draw img");
-    CGContextTranslateCTM(context, -width/2, -length/2);
 
 #ifndef CAPTUREDEFAULTS
     NSTimeInterval t = tim->currentTime();
@@ -249,14 +233,14 @@
     CGContextSetBlendMode(context, kCGBlendModeNormal);
     CGContextSetShouldAntialias(context, true);
 #else  // not PER_PIXEL_METHOD
-    [self drawBoundariesForAltitudeIntoContext:context minAltitude:TWILIGHT_ALT maxAltitude:0 numBoundaries:4 subSolarLongitude:sslng subSolarLatitude:sslat borderOnly:false];
+    drawBoundariesForAltitudeIntoContext(context, TWILIGHT_ALT, 0, 4, sslng, sslat, false, width, length);
 #endif
 
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"EOShowSubsolarPoint"]) {
 	// draw the subsolar point
-	CGContextSetLineWidth(context, 1);
+	CGContextSetLineWidth(context, markScale);
 	CGContextSetRGBStrokeColor(context, 1, 1, 0, 1);	// yellow
-	CGContextAddArc(context, lngToX(sslng), latToY(sslat), 3, 0, twoPi, 0);
+	CGContextAddArc(context, lngToX(sslng), latToY(sslat), 3 * markScale, 0, twoPi, 0);
 	CGContextDrawPath(context, kCGPathStroke);
 	//printf("subsolar latitude = %+5.1f;   longitude = %+6.1f   [%.0f,%.0f]\n", sslat*360/twoPi, sslng*360/twoPi, lngToX(sslng), latToY(sslat));
 	
@@ -264,14 +248,40 @@
     
     // draw current location
     ESLocation *location = env->location();
-    CGContextSetLineWidth(context, 1);
+    CGContextSetLineWidth(context, markScale);
     CGContextSetRGBStrokeColor(context, 1, 0, 0, 1);	// red
-    CGContextAddArc(context, lngToX(location->longitudeRadians()), latToY(location->latitudeRadians()), 1, 0, twoPi, 0);
+    CGContextAddArc(context, lngToX(location->longitudeRadians()), latToY(location->latitudeRadians()), markScale, 0, twoPi, 0);
     CGContextDrawPath(context, kCGPathStroke);
     // printf("env latitude = %+5.1f;   longitude = %+6.1f   [%.0f,%.0f]\n", env.latitude*360/twoPi, env.longitude*360/twoPi, lngToX(env.longitude), latToY(env.latitude));
 
-    CGContextRestoreGState(context);
 #endif
+}
+
+- (void)drawRect:(CGRect)rect {
+    traceEnter("EOEarthView: drawRect");
+    //printf("    EOEarthView frame  %6.2f, %6.2f   %6.2f x %6.2f\n", self.frame.origin.x, self.frame.origin.y, self.frame.size.width, self.frame.size.height);
+    //printf("    EOEarthView bounds %6.2f, %6.2f   %6.2f x %6.2f\n", self.bounds.origin.x, self.bounds.origin.y, self.bounds.size.width, self.bounds.size.height);
+    CGContextRef context = UIGraphicsGetCurrentContext();
+    CGContextSaveGState(context);
+
+    setupContextForZeroOffsetAndScale(context, &zeroOffset, masterScale);
+
+    // get the image for this month
+    int thisMonth = tim->monthNumberUsingEnv(env);
+    if (monthLoaded != thisMonth) {
+	//tracePrintf1("loading earth image for %d\n", thisMonth+1);
+	[img release];
+	img = [[Utilities imageFromResource:[NSString stringWithFormat:@"%02d.png", thisMonth+1]] retain];
+	assert(img);
+	assert(img.size.width == width && img.size.height == length);
+	monthLoaded = thisMonth;
+    }
+
+    CGContextScaleCTM(context, 1, -1);
+    CGContextTranslateCTM(context, -width/2, -length/2);
+    EODrawEarthMap(context, img, width, length, 1/*markScale*/, tim, env);
+
+    CGContextRestoreGState(context);
     traceExit("EOEarthView: drawRect");
 }
 

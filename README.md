@@ -33,6 +33,7 @@ if you have set up your Xcode development profiles, a device) and select Product
 
 ## Versioning
 
+* 1.7 adds setting the location (and its timezone) by touching the world map
 * 1.6.1 has a few UI bugs fixed
 * 1.6 is this open-sourced code newly re-released in the App Store under [new stewardship](https://bjornfreemanbenson.com/emerald-observatory)
 

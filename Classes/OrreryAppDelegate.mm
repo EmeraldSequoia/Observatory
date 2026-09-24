@@ -215,7 +215,7 @@ nil,
 NSString *h5 = NSLocalizedStringWithDefaultValue(@"Help Text5",
 nil,
 [NSBundle mainBundle],
-@"The red dot on the Earth map marks the current location.  If it isn't what you expect you may want to set it manually using the controls above.  If your location and timezone don't match then the astronomical information will look weird.",
+@"The red dot on the Earth map marks the current location.  If it isn't what you expect you may want to set it manually using the controls above.  If your location and timezone don't match then the astronomical information will look weird.  You can also tap the Earth map to pick a location on a larger map; the timezone changes to match.",
 @"help message5");
 
 NSString *h6 = NSLocalizedStringWithDefaultValue(@"Help Text6",
