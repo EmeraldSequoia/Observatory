@@ -24,5 +24,6 @@ extern void EODrawEarthMap(CGContextRef context, UIImage *img, double width, dou
 }
 
 - (EOEarthView *)initWithX:(double)ax y:(double)ay width:(double)w height:(double)h update:(double)aUpdate;
+- (CGRect)mapRect;  // where the map is drawn, in this view's coordinates
 
 @end

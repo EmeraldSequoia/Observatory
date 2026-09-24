@@ -285,6 +285,12 @@ void EODrawEarthMap(CGContextRef context, UIImage *img, double width, double len
     traceExit("EOEarthView: drawRect");
 }
 
+- (CGRect)mapRect {
+    double w = width * masterScale;
+    double h = length * masterScale;
+    return CGRectMake(zeroOffset.x - w/2, zeroOffset.y - h/2, w, h);
+}
+
 - (void)dealloc {
     [img release];
     [super dealloc];

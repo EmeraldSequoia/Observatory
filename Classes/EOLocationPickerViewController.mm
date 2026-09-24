@@ -18,6 +18,12 @@
 #define CURSOR_RADIUS        12.0
 #define LABEL_OFFSET         44.0  // coordinate label's center above the finger, so the finger doesn't hide it
 
+#define ZOOM_OUT_DURATION    0.65  // seconds; a spring with a little overshoot, as if the map were lifted out of the clock
+#define ZOOM_OUT_DAMPING     0.72
+#define ZOOM_IN_DURATION     0.5   // settles back into the clock without overshooting its frame
+#define FADE_DURATION        0.25
+#define MAP_SHADOW_OPACITY   0.6
+
 static NSString *
 coordinateString(double latitudeDegrees, double longitudeDegrees) {
     NSString *ns = latitudeDegrees >= 0
@@ -169,6 +175,10 @@ coordinateString(double latitudeDegrees, double longitudeDegrees) {
     coordinateLabel.hidden = YES;
 }
 
+- (void)hideCoordinateLabel {
+    coordinateLabel.hidden = YES;
+}
+
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     CGPoint p = [self clampedPointForTouch:[touches anyObject]];
     touchStartPoint = p;
@@ -212,17 +222,24 @@ coordinateString(double latitudeDegrees, double longitudeDegrees) {
 
 @implementation EOLocationPickerViewController
 
+@synthesize sourceView;
+
+static UIColor *
+dimColor() {
+    return [UIColor colorWithWhite:0 alpha:0.6];
+}
+
 - (id)init {
     if ((self = [super initWithNibName:nil bundle:nil])) {
 	self.modalPresentationStyle = UIModalPresentationOverFullScreen;  // keep the clock visible, dimmed, behind the map
-	self.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;
+	self.transitioningDelegate = self;
     }
     return self;
 }
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = [UIColor colorWithWhite:0 alpha:0.6];
+    self.view.backgroundColor = dimColor();
 
     // Tapping the dimmed area outside the map closes without changing anything
     UITapGestureRecognizer *backgroundTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(cancel)];
@@ -232,6 +249,10 @@ coordinateString(double latitudeDegrees, double longitudeDegrees) {
 
     mapView = [[EOLocationPickerMapView alloc] initWithFrame:CGRectZero];
     mapView.delegate = self;
+    mapView.layer.shadowColor = [UIColor blackColor].CGColor;
+    mapView.layer.shadowOpacity = MAP_SHADOW_OPACITY;
+    mapView.layer.shadowRadius = 24;
+    mapView.layer.shadowOffset = CGSizeMake(0, 10);
     [self.view addSubview:mapView];
 
     // The green dot marks the device's location, if we know it and may use it
@@ -281,7 +302,11 @@ coordinateString(double latitudeDegrees, double longitudeDegrees) {
     CGFloat mapHeight = floor(mapWidth / 2);
     CGFloat x = round(CGRectGetMidX(safe) - mapWidth / 2);
     CGFloat y = round(CGRectGetMidY(safe) - (mapHeight + headerHeight) / 2 + headerHeight);
+    CGAffineTransform transform = mapView.transform;  // set frame without a transform, and then put it back, if animating
+    mapView.transform = CGAffineTransformIdentity;
     mapView.frame = CGRectMake(x, y, mapWidth, mapHeight);
+    mapView.transform = transform;
+    mapView.layer.shadowPath = [UIBezierPath bezierPathWithRect:mapView.bounds].CGPath;
 
     CGFloat headerY = y - headerHeight;
     closeButton.frame = CGRectMake(x + mapWidth - buttonSize, headerY, buttonSize, buttonSize);
@@ -307,6 +332,7 @@ coordinateString(double latitudeDegrees, double longitudeDegrees) {
 	return;
     }
     picked = true;
+    pickedLocation = true;
     [self dismissViewControllerAnimated:YES completion:^{
 	[[EOClock theClock] setManualLocationLatitude:latitudeDegrees longitude:longitudeDegrees];
     }];
@@ -322,11 +348,130 @@ coordinateString(double latitudeDegrees, double longitudeDegrees) {
     }];
 }
 
+// UIViewControllerTransitioningDelegate			---------------------------------------------------------
+
+- (id<UIViewControllerAnimatedTransitioning>)animationControllerForPresentedController:(UIViewController *)presented
+								   presentingController:(UIViewController *)presentingController
+								       sourceController:(UIViewController *)source {
+    presenting = true;
+    return self;
+}
+
+- (id<UIViewControllerAnimatedTransitioning>)animationControllerForDismissedController:(UIViewController *)dismissed {
+    presenting = false;
+    return self;
+}
+
+// UIViewControllerAnimatedTransitioning			---------------------------------------------------------
+
+- (bool)zooms {
+    return sourceView && sourceView.window && !UIAccessibilityIsReduceMotionEnabled();
+}
+
+- (NSTimeInterval)transitionDuration:(id<UIViewControllerContextTransitioning>)context {
+    if (![self zooms]) {
+	return FADE_DURATION;
+    }
+    return presenting ? ZOOM_OUT_DURATION : ZOOM_IN_DURATION;
+}
+
+// Takes mapView from its own frame to the small map's, as it appears on the clock right now
+- (CGAffineTransform)transformToSourceView {
+    CGRect source = [sourceView convertRect:[(EOEarthView *)sourceView mapRect] toView:self.view];
+    CGAffineTransform saved = mapView.transform;
+    mapView.transform = CGAffineTransformIdentity;
+    CGRect map = mapView.frame;
+    mapView.transform = saved;
+    CGAffineTransform t = CGAffineTransformMakeTranslation(CGRectGetMidX(source) - CGRectGetMidX(map), CGRectGetMidY(source) - CGRectGetMidY(map));
+    return CGAffineTransformScale(t, source.size.width / map.size.width, source.size.height / map.size.height);
+}
+
+- (void)animateShadowOpacityTo:(float)opacity duration:(NSTimeInterval)duration {
+    CABasicAnimation *fade = [CABasicAnimation animationWithKeyPath:@"shadowOpacity"];
+    fade.fromValue = @(mapView.layer.presentationLayer ? mapView.layer.presentationLayer.shadowOpacity : mapView.layer.shadowOpacity);
+    fade.toValue = @(opacity);
+    fade.duration = duration;
+    mapView.layer.shadowOpacity = opacity;
+    [mapView.layer addAnimation:fade forKey:@"shadowOpacity"];
+}
+
+- (void)animateTransition:(id<UIViewControllerContextTransitioning>)context {
+    UIView *containerView = context.containerView;
+    NSTimeInterval duration = [self transitionDuration:context];
+    if (presenting) {
+	UIView *toView = [context viewForKey:UITransitionContextToViewKey];
+	toView.frame = [context finalFrameForViewController:self];
+	[containerView addSubview:toView];
+	[toView layoutIfNeeded];
+	hintLabel.alpha = 0;
+	closeButton.alpha = 0;
+	if (![self zooms]) {
+	    toView.alpha = 0;
+	    [UIView animateWithDuration:duration animations:^{
+		toView.alpha = 1;
+		hintLabel.alpha = 1;
+		closeButton.alpha = 1;
+	    } completion:^(BOOL finished) {
+		[context completeTransition:!context.transitionWasCancelled];
+	    }];
+	    return;
+	}
+	// The map itself lifts out of the clock (leaving its place empty), swells to full size, and casts a shadow
+	sourceView.hidden = YES;
+	self.view.backgroundColor = [UIColor clearColor];
+	mapView.transform = [self transformToSourceView];
+	mapView.layer.shadowOpacity = 0;
+	[self animateShadowOpacityTo:MAP_SHADOW_OPACITY duration:duration];
+	[UIView animateWithDuration:duration delay:0 usingSpringWithDamping:ZOOM_OUT_DAMPING initialSpringVelocity:0 options:0 animations:^{
+	    mapView.transform = CGAffineTransformIdentity;
+	    self.view.backgroundColor = dimColor();
+	} completion:^(BOOL finished) {
+	    [context completeTransition:!context.transitionWasCancelled];
+	}];
+	// Then the instructions and close button, once the map has nearly arrived
+	[UIView animateWithDuration:FADE_DURATION delay:duration * 0.6 options:0 animations:^{
+	    hintLabel.alpha = 1;
+	    closeButton.alpha = 1;
+	} completion:NULL];
+    } else {
+	UIView *fromView = [context viewForKey:UITransitionContextFromViewKey];
+	if (pickedLocation) {
+	    [mapView hideCoordinateLabel];
+	} else {
+	    [mapView hideCursor];
+	}
+	if (![self zooms]) {
+	    sourceView.hidden = NO;
+	    [UIView animateWithDuration:duration animations:^{
+		fromView.alpha = 0;
+	    } completion:^(BOOL finished) {
+		[fromView removeFromSuperview];
+		[context completeTransition:!context.transitionWasCancelled];
+	    }];
+	    return;
+	}
+	[UIView animateWithDuration:FADE_DURATION * 0.6 animations:^{
+	    hintLabel.alpha = 0;
+	    closeButton.alpha = 0;
+	}];
+	[self animateShadowOpacityTo:0 duration:duration];
+	[UIView animateWithDuration:duration delay:0 usingSpringWithDamping:1 initialSpringVelocity:0 options:0 animations:^{
+	    mapView.transform = [self transformToSourceView];
+	    self.view.backgroundColor = [UIColor clearColor];
+	} completion:^(BOOL finished) {
+	    sourceView.hidden = NO;  // the small map takes over exactly where the large one landed
+	    [fromView removeFromSuperview];
+	    [context completeTransition:!context.transitionWasCancelled];
+	}];
+    }
+}
+
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations {
     return UIInterfaceOrientationMaskAll;
 }
 
 - (void)dealloc {
+    sourceView.hidden = NO;  // in case the picker goes away some other way
     mapView.delegate = nil;
     [mapView release];
     [hintLabel release];

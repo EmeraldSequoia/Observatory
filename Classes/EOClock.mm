@@ -724,6 +724,7 @@ static bool firstAfterComingToForeground = true;
 	return;
     }
     EOLocationPickerViewController *picker = [[EOLocationPickerViewController alloc] init];
+    picker.sourceView = earthView;  // it zooms out of (and back into) the small map
     [mainViewController presentViewController:picker animated:YES completion:NULL];
     [picker release];
 }

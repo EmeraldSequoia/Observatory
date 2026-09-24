@@ -34,15 +34,24 @@
 @property (nonatomic, assign) id<EOLocationPickerMapViewDelegate> delegate;
 
 - (void)setGreenDotLatitude:(double)latitudeDegrees longitude:(double)longitudeDegrees;
+- (void)hideCursor;
+- (void)hideCoordinateLabel;
 
 @end
 
-// Presented full screen over the clock when the small Earth map is tapped
-@interface EOLocationPickerViewController : UIViewController <EOLocationPickerMapViewDelegate, UIGestureRecognizerDelegate> {
+// Presented full screen over the clock when the small Earth map is tapped.  The large map zooms out of the small one
+// (sourceView) and back into it when closed.
+@interface EOLocationPickerViewController : UIViewController <EOLocationPickerMapViewDelegate, UIGestureRecognizerDelegate,
+							      UIViewControllerTransitioningDelegate, UIViewControllerAnimatedTransitioning> {
     EOLocationPickerMapView *mapView;
     UILabel             *hintLabel;
     UIButton            *closeButton;
+    UIView              *sourceView;  // not retained
     bool                picked;
+    bool                pickedLocation;  // the cursor rides the map back down, landing where the red dot will be
+    bool                presenting;      // which way the transition being animated goes
 }
+
+@property (nonatomic, assign) UIView *sourceView;  // an EOEarthView
 
 @end
