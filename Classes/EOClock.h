@@ -173,6 +173,7 @@ class ClockTimeSyncObserver;
 @property (readonly) bool noonOnTop, setMode;
 @property (readwrite) bool finishingHelp;
 @property (readonly) UILabel *dateLabel;
+@property (readonly) UILabel *NTPStatusLabel;  // the sync dot in the lower left corner
 @property (readonly) UIInterfaceOrientation lastOrientation;
 
 + (EOClock *)theClock;

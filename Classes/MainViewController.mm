@@ -27,6 +27,9 @@
     traceEnter("viewDidLoad");
     [super viewDidLoad];
     baseView.autoresizingMask = UIViewAutoresizingNone;  // scaleBaseViewToSize: sizes it instead
+    // placeInfoButtons places these, before a rotation resizes the window; autoresizing would then move them off screen
+    infoButton1.autoresizingMask = UIViewAutoresizingNone;
+    infoButton2.autoresizingMask = UIViewAutoresizingNone;
     // Running on a Mac, the info button's template image isn't drawn when the view first appears (only after the
     // Options screen has been presented and dismissed), so give it an image that already has its color
     UIImage *infoImage = [[UIImage systemImageNamed:@"info.circle"] imageWithTintColor:[UIColor systemBlueColor]
@@ -202,11 +205,28 @@ static void setContentScaleFactor(UIView *view, CGFloat contentScaleFactor) {
     }
 }
 
+// Put the info button in the lower right corner as the mirror image of the sync dot in the lower left, so the two line
+// up however the clock is scaled and shifted.  (The XIB pins the button to the window's corner instead, which only
+// lines up with the dot on some screen sizes.)
+- (void)placeInfoButtons {
+    UILabel *dot = [EOClock theClock].NTPStatusLabel;
+    UIView *clockView = dot.superview;
+    if (!clockView) {  // not set up yet
+        return;
+    }
+    CGPoint clockCenter = [EOClock clockCenter];
+    CGPoint mirror = CGPointMake(2 * clockCenter.x - dot.center.x, dot.center.y);
+    CGPoint center = [clockView convertPoint:mirror toView:self.view];
+    infoButton1.center = center;
+    infoButton2.center = center;  // the larger, invisible touch target
+}
+
 - (void) updateLayoutAfterRotationToSize:(CGSize)size {
     traceEnter("updateLayoutAfterRotationToSize");
     UIInterfaceOrientation newOrientation = interfaceOrientationForSize(size);
     CGSize canvasSize = [self scaleBaseViewToSize:size orientation:newOrientation];
     [[EOClock theClock] resetAfterOrientationChangeToOrientation:newOrientation newSize:canvasSize];
+    [self placeInfoButtons];
     //printf("updateLayoutAfterRotationToSize Button 1 position %f %f\n", infoButton1.frame.origin.x, infoButton1.frame.origin.y);
     //printf("updateLayoutAfterRotationToSize Button 2 position %f %f\n", infoButton2.frame.origin.x, infoButton2.frame.origin.y);
     traceExit("updateLayoutAfterRotationToSize");

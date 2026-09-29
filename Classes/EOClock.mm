@@ -143,7 +143,7 @@ typedef enum eoseason {
 
 @implementation EOClock
 
-@synthesize time, env, noonOnTop, lastOrientation, setMode, dateLabel, finishingHelp;
+@synthesize time, env, noonOnTop, lastOrientation, setMode, dateLabel, NTPStatusLabel, finishingHelp;
 
 - (EOSeason)seasonForHereAndNow {
     bool north = env->location()->latitudeDegrees() >= 0;		    // equator counts as north
