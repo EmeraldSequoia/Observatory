@@ -12,9 +12,9 @@
 #include "ESWatchTime.hpp"
 #include "ESTimeLocAstroEnvironment.hpp"
 #include "ESDeviceLocationManager.hpp"
+#include "ESLocation.hpp"
 
-#define GREEN_DOT_HIT_RADIUS 22.0  // points; a touch starting this close to the green dot picks Location Services...
-#define DRAG_SLOP            10.0  // ...unless it moves farther than this before lifting
+#define BLUE_DOT_HIT_RADIUS 22.0  // points; a touch starting this close to the blue dot snaps to it while it stays this close
 #define CURSOR_RADIUS        12.0
 #define LABEL_OFFSET         44.0  // coordinate label's center above the finger, so the finger doesn't hide it
 
@@ -23,6 +23,12 @@
 #define ZOOM_IN_DURATION     0.5   // settles back into the clock without overshooting its frame
 #define FADE_DURATION        0.25
 #define MAP_SHADOW_OPACITY   0.6
+
+// As EOClock's frame around the header (headerLineWidth and its stroke color), in clock canvas units
+#define BORDER_LINE_WIDTH    2.0
+#define BORDER_GAP           2.0
+#define BORDER_GRAY          0.5
+#define BORDER_ALPHA         0.5
 
 static NSString *
 coordinateString(double latitudeDegrees, double longitudeDegrees) {
@@ -53,11 +59,29 @@ coordinateString(double latitudeDegrees, double longitudeDegrees) {
 	nightImg = [[UIImage alloc] initWithContentsOfFile:[[NSBundle mainBundle] pathForResource:@"night-large" ofType:@"jpg"]];
 	assert(nightImg);
 
-	greenDotLayer = [[CAShapeLayer alloc] init];
-	greenDotLayer.fillColor = [UIColor clearColor].CGColor;  // path and line width are set in layoutSubviews to match the red dot
-	greenDotLayer.strokeColor = [UIColor colorWithRed:0 green:1 blue:0 alpha:1].CGColor;
-	greenDotLayer.hidden = YES;
-	[self.layer addSublayer:greenDotLayer];
+	redDotLayer = [[CAShapeLayer alloc] init];
+	// As EODrawEarthMap draws it on the small map; path, line width and position are set in layoutSubviews
+	redDotLayer.fillColor = [UIColor clearColor].CGColor;
+	redDotLayer.strokeColor = [UIColor redColor].CGColor;
+	[self.layer addSublayer:redDotLayer];
+
+	blueDotLayer = [[CAShapeLayer alloc] init];
+	// Like the current-location dot in Apple Maps and Google Maps; path and line width are set in layoutSubviews
+	blueDotLayer.fillColor = [UIColor colorWithRed:0 green:122/255.0 blue:1 alpha:1].CGColor;
+	blueDotLayer.strokeColor = [UIColor whiteColor].CGColor;
+	blueDotLayer.hidden = YES;
+	[self.layer addSublayer:blueDotLayer];
+
+	matLayer = [[CAShapeLayer alloc] init];
+	matLayer.fillColor = [UIColor clearColor].CGColor;
+	matLayer.strokeColor = [UIColor blackColor].CGColor;
+	[self.layer addSublayer:matLayer];
+	borderLayer = [[CAShapeLayer alloc] init];
+	borderLayer.fillColor = [UIColor clearColor].CGColor;
+	borderLayer.strokeColor = [UIColor colorWithWhite:BORDER_GRAY alpha:BORDER_ALPHA].CGColor;
+	borderLayer.lineJoin = kCALineJoinRound;
+	[self.layer addSublayer:borderLayer];
+	[self setBorderScale:1];
 
 	cursorLayer = [[CAShapeLayer alloc] init];
 	UIBezierPath *cursorPath = [UIBezierPath bezierPathWithArcCenter:CGPointZero radius:CURSOR_RADIUS startAngle:0 endAngle:2*M_PI clockwise:YES];
@@ -99,31 +123,52 @@ coordinateString(double latitudeDegrees, double longitudeDegrees) {
     return point.x / self.bounds.size.width * 360 - 180;
 }
 
-- (void)setGreenDotLatitude:(double)latitudeDegrees longitude:(double)longitudeDegrees {
-    showGreenDot = true;
-    greenLatitudeDegrees = latitudeDegrees;
-    greenLongitudeDegrees = longitudeDegrees;
+- (void)setBlueDotLatitude:(double)latitudeDegrees longitude:(double)longitudeDegrees {
+    showBlueDot = true;
+    blueLatitudeDegrees = latitudeDegrees;
+    blueLongitudeDegrees = longitudeDegrees;
     [self setNeedsLayout];
 }
 
-- (CGPoint)greenDotPoint {
-    return [self pointForLatitude:greenLatitudeDegrees longitude:greenLongitudeDegrees];
+- (CGPoint)blueDotPoint {
+    return [self pointForLatitude:blueLatitudeDegrees longitude:blueLongitudeDegrees];
 }
 
-// Scales the red dot drawn by EODrawEarthMap; the green dot matches it
+// Scales the red dot drawn by EODrawEarthMap; the blue dot is the same size
 - (double)markScale {
     return fmax(2, self.bounds.size.width / 400);
+}
+
+- (void)setBorderScale:(double)clockScale {
+    matLayer.lineWidth = BORDER_GAP * clockScale;
+    borderLayer.lineWidth = BORDER_LINE_WIDTH * clockScale;
+    [self setNeedsLayout];
+}
+
+// How far the border reaches outside the map
+- (double)borderOutset {
+    return matLayer.lineWidth + borderLayer.lineWidth;
 }
 
 - (void)layoutSubviews {
     [super layoutSubviews];
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
-    greenDotLayer.hidden = !showGreenDot;
+    CGRect bounds = self.bounds;
+    matLayer.path = [UIBezierPath bezierPathWithRect:CGRectInset(bounds, -matLayer.lineWidth / 2, -matLayer.lineWidth / 2)].CGPath;
+    double borderInset = -(matLayer.lineWidth + borderLayer.lineWidth / 2);
+    borderLayer.path = [UIBezierPath bezierPathWithRect:CGRectInset(bounds, borderInset, borderInset)].CGPath;
+    self.layer.shadowPath = [UIBezierPath bezierPathWithRect:CGRectInset(bounds, -[self borderOutset], -[self borderOutset])].CGPath;
+    blueDotLayer.hidden = !showBlueDot;
     double markScale = [self markScale];
-    greenDotLayer.path = [UIBezierPath bezierPathWithArcCenter:CGPointZero radius:markScale startAngle:0 endAngle:2*M_PI clockwise:YES].CGPath;
-    greenDotLayer.lineWidth = markScale;
-    greenDotLayer.position = [self greenDotPoint];
+    ESLocation *location = [[EOClock theClock] env]->location();
+    redDotLayer.path = [UIBezierPath bezierPathWithArcCenter:CGPointZero radius:markScale startAngle:0 endAngle:2*M_PI clockwise:YES].CGPath;
+    redDotLayer.lineWidth = markScale;
+    redDotLayer.position = [self pointForLatitude:location->latitudeDegrees() longitude:location->longitudeDegrees()];
+    // The red dot is a ring of radius markScale and width markScale, so 1.5 * markScale across its outer edge
+    blueDotLayer.path = [UIBezierPath bezierPathWithArcCenter:CGPointZero radius:1.25 * markScale startAngle:0 endAngle:2*M_PI clockwise:YES].CGPath;
+    blueDotLayer.lineWidth = 0.5 * markScale;
+    blueDotLayer.position = [self blueDotPoint];
     [CATransaction commit];
 }
 
@@ -134,7 +179,7 @@ coordinateString(double latitudeDegrees, double longitudeDegrees) {
     // so draw that in its own layer over the night image
     [nightImg drawInRect:self.bounds];
     CGContextBeginTransparencyLayer(context, NULL);
-    EODrawEarthMap(context, img, size.width, size.height, [self markScale],
+    EODrawEarthMap(context, img, size.width, size.height, [self markScale], false/*drawLocation*/,
 		   [[EOClock theClock] time], [[EOClock theClock] env]);
     CGContextEndTransparencyLayer(context);
 }
@@ -153,8 +198,8 @@ coordinateString(double latitudeDegrees, double longitudeDegrees) {
     [CATransaction commit];
 
     coordinateLabel.hidden = NO;
-    if (touchStartedOnGreenDot) {
-	coordinateLabel.text = NSLocalizedString(@"Location Services", @"label shown while touching the green dot on the location picker map");
+    if (snappedToBlueDot) {
+	coordinateLabel.text = NSLocalizedString(@"Location Services", @"label shown while touching the blue dot on the location picker map");
     } else {
 	coordinateLabel.text = coordinateString([self latitudeForPoint:p], [self longitudeForPoint:p]);
     }
@@ -179,25 +224,37 @@ coordinateString(double latitudeDegrees, double longitudeDegrees) {
     coordinateLabel.hidden = YES;
 }
 
+- (bool)pointIsOnBlueDot:(CGPoint)p {
+    CGPoint blue = [self blueDotPoint];
+    return showBlueDot && hypot(p.x - blue.x, p.y - blue.y) <= BLUE_DOT_HIT_RADIUS;
+}
+
+// Only a touch that started on the blue dot snaps to it, so one that started elsewhere can set the location right
+// next to the blue dot.  Such a touch snaps whenever it is on the blue dot, even after dragging away and back.
+// Otherwise the cursor stands for the new location, so the red dot hides.
+- (void)trackTouchAtPoint:(CGPoint)p {
+    snappedToBlueDot = touchStartedOnBlueDot && [self pointIsOnBlueDot:p];
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    redDotLayer.hidden = !snappedToBlueDot;
+    [CATransaction commit];
+    [self moveCursorToPoint:(snappedToBlueDot ? [self blueDotPoint] : p)];
+}
+
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     CGPoint p = [self clampedPointForTouch:[touches anyObject]];
-    touchStartPoint = p;
-    CGPoint green = [self greenDotPoint];
-    touchStartedOnGreenDot = showGreenDot && hypot(p.x - green.x, p.y - green.y) <= GREEN_DOT_HIT_RADIUS;
-    [self moveCursorToPoint:p];
+    touchStartedOnBlueDot = [self pointIsOnBlueDot:p];
+    [self trackTouchAtPoint:p];
 }
 
 - (void)touchesMoved:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
-    CGPoint p = [self clampedPointForTouch:[touches anyObject]];
-    if (touchStartedOnGreenDot && hypot(p.x - touchStartPoint.x, p.y - touchStartPoint.y) > DRAG_SLOP) {
-	touchStartedOnGreenDot = false;  // a drag, even one passing back over the green dot, picks a spot on the map
-    }
-    [self moveCursorToPoint:p];
+    [self trackTouchAtPoint:[self clampedPointForTouch:[touches anyObject]]];
 }
 
 - (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     CGPoint p = [self clampedPointForTouch:[touches anyObject]];
-    if (touchStartedOnGreenDot) {
+    [self trackTouchAtPoint:p];
+    if (snappedToBlueDot) {
 	[delegate mapViewDidPickLocationServices:self];
     } else {
 	[delegate mapView:self didPickLatitude:[self latitudeForPoint:p] longitude:[self longitudeForPoint:p]];
@@ -205,15 +262,23 @@ coordinateString(double latitudeDegrees, double longitudeDegrees) {
 }
 
 - (void)touchesCancelled:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
-    touchStartedOnGreenDot = false;
+    touchStartedOnBlueDot = false;
+    snappedToBlueDot = false;
     [self hideCursor];
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    redDotLayer.hidden = NO;
+    [CATransaction commit];
 }
 
 - (void)dealloc {
     [img release];
     [nightImg release];
     [cursorLayer release];
-    [greenDotLayer release];
+    [redDotLayer release];
+    [blueDotLayer release];
+    [matLayer release];
+    [borderLayer release];
     [coordinateLabel release];
     [super dealloc];
 }
@@ -255,27 +320,24 @@ dimColor() {
     mapView.layer.shadowOffset = CGSizeMake(0, 10);
     [self.view addSubview:mapView];
 
-    // The green dot marks the device's location, if we know it and may use it
+    // The blue dot marks the device's location, if we know it and may use it
     CLLocationManager *locationManager = [[CLLocationManager alloc] init];
     CLAuthorizationStatus status = locationManager.authorizationStatus;
     if (status != kCLAuthorizationStatusDenied && status != kCLAuthorizationStatusRestricted) {
 	if (ESDeviceLocationManager::lastLocationValid()) {
-	    [mapView setGreenDotLatitude:ESDeviceLocationManager::lastLatitudeDegrees() longitude:ESDeviceLocationManager::lastLongitudeDegrees()];
+	    [mapView setBlueDotLatitude:ESDeviceLocationManager::lastLatitudeDegrees() longitude:ESDeviceLocationManager::lastLongitudeDegrees()];
 	} else if (locationManager.location) {  // CoreLocation's cached fix, when the app hasn't asked for one since launch
 	    CLLocationCoordinate2D coord = locationManager.location.coordinate;
-	    [mapView setGreenDotLatitude:coord.latitude longitude:coord.longitude];
+	    [mapView setBlueDotLatitude:coord.latitude longitude:coord.longitude];
 	}
     }
     [locationManager release];
 
-    hintLabel = [[UILabel alloc] init];
-    hintLabel.font = [UIFont systemFontOfSize:17];
-    hintLabel.textColor = [UIColor whiteColor];
-    hintLabel.textAlignment = NSTextAlignmentCenter;
-    hintLabel.numberOfLines = 0;
-    hintLabel.text = NSLocalizedString(@"Touch the map and drag to choose a location, then lift your finger to set it.  Tap the green dot to go back to Location Services.",
-				       @"instructions above the location picker map");
-    [self.view addSubview:hintLabel];
+    // No instructions on screen (touching the map should explain itself), but VoiceOver reads them
+    mapView.isAccessibilityElement = YES;
+    mapView.accessibilityLabel = NSLocalizedString(@"World map", @"VoiceOver name of the location picker map");
+    mapView.accessibilityHint = NSLocalizedString(@"Touch the map and drag to choose a location, then lift your finger to set it.  Tap the blue dot to go back to Location Services.",
+						  @"VoiceOver instructions for the location picker map");
 
     closeButton = [[UIButton buttonWithType:UIButtonTypeSystem] retain];
     [closeButton setImage:[UIImage systemImageNamed:@"xmark.circle.fill"
@@ -289,29 +351,26 @@ dimColor() {
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    CGRect safe = UIEdgeInsetsInsetRect(self.view.bounds, self.view.safeAreaInsets);
-    const CGFloat buttonSize = 44;
-    const CGFloat gap = 8;
-    CGFloat maxWidth = safe.size.width * 0.9;
+    // Match the border to the clock's frame around the small map, at the size the clock is drawn now
+    if (sourceView.superview) {
+	[mapView setBorderScale:[sourceView.superview convertRect:CGRectMake(0, 0, 1, 1) toView:nil].size.width];
+    }
 
-    // Size the hint for the widest the map could be, then fit the 2:1 map in what's left of 90% of the height
-    CGFloat hintHeight = ceil([hintLabel sizeThatFits:CGSizeMake(maxWidth - 2 * (buttonSize + gap), CGFLOAT_MAX)].height);
-    CGFloat headerHeight = fmax(hintHeight, buttonSize) + gap;
-    CGFloat maxHeight = safe.size.height * 0.9 - headerHeight;
-    CGFloat mapWidth = floor(fmin(maxWidth, maxHeight * 2));
+    // The 2:1 map, centered, as large as fits in 90% of the safe area
+    CGRect safe = UIEdgeInsetsInsetRect(self.view.bounds, self.view.safeAreaInsets);
+    CGFloat mapWidth = floor(fmin(safe.size.width * 0.9, safe.size.height * 0.9 * 2));
     CGFloat mapHeight = floor(mapWidth / 2);
     CGFloat x = round(CGRectGetMidX(safe) - mapWidth / 2);
-    CGFloat y = round(CGRectGetMidY(safe) - (mapHeight + headerHeight) / 2 + headerHeight);
+    CGFloat y = round(CGRectGetMidY(safe) - mapHeight / 2);
     CGAffineTransform transform = mapView.transform;  // set frame without a transform, and then put it back, if animating
     mapView.transform = CGAffineTransformIdentity;
     mapView.frame = CGRectMake(x, y, mapWidth, mapHeight);
     mapView.transform = transform;
-    mapView.layer.shadowPath = [UIBezierPath bezierPathWithRect:mapView.bounds].CGPath;
 
-    CGFloat headerY = y - headerHeight;
-    closeButton.frame = CGRectMake(x + mapWidth - buttonSize, headerY, buttonSize, buttonSize);
-    CGFloat hintWidth = mapWidth - 2 * (buttonSize + gap);  // centered over the map, clear of the close button
-    hintLabel.frame = CGRectMake(x + buttonSize + gap, headerY + (headerHeight - gap - hintHeight) / 2, hintWidth, hintHeight);
+    // The close button sits on the border's top right corner, like a badge
+    const CGFloat buttonSize = 44;
+    CGFloat outset = [mapView borderOutset];
+    closeButton.frame = CGRectMake(x + mapWidth + outset - buttonSize / 2, y - outset - buttonSize / 2, buttonSize, buttonSize);
 }
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch {
@@ -403,13 +462,11 @@ dimColor() {
 	toView.frame = [context finalFrameForViewController:self];
 	[containerView addSubview:toView];
 	[toView layoutIfNeeded];
-	hintLabel.alpha = 0;
 	closeButton.alpha = 0;
 	if (![self zooms]) {
 	    toView.alpha = 0;
 	    [UIView animateWithDuration:duration animations:^{
 		toView.alpha = 1;
-		hintLabel.alpha = 1;
 		closeButton.alpha = 1;
 	    } completion:^(BOOL finished) {
 		[context completeTransition:!context.transitionWasCancelled];
@@ -428,9 +485,8 @@ dimColor() {
 	} completion:^(BOOL finished) {
 	    [context completeTransition:!context.transitionWasCancelled];
 	}];
-	// Then the instructions and close button, once the map has nearly arrived
+	// Then the close button, once the map has nearly arrived
 	[UIView animateWithDuration:FADE_DURATION delay:duration * 0.6 options:0 animations:^{
-	    hintLabel.alpha = 1;
 	    closeButton.alpha = 1;
 	} completion:NULL];
     } else {
@@ -451,7 +507,6 @@ dimColor() {
 	    return;
 	}
 	[UIView animateWithDuration:FADE_DURATION * 0.6 animations:^{
-	    hintLabel.alpha = 0;
 	    closeButton.alpha = 0;
 	}];
 	[self animateShadowOpacityTo:0 duration:duration];
@@ -474,7 +529,6 @@ dimColor() {
     sourceView.hidden = NO;  // in case the picker goes away some other way
     mapView.delegate = nil;
     [mapView release];
-    [hintLabel release];
     [closeButton release];
     [super dealloc];
 }

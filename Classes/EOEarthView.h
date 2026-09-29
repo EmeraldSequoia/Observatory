@@ -15,7 +15,7 @@ class ESTimeLocAstroEnvironment;
 // Draws the Earth map (the month's image, day/night shading, and the red dot at the current location) into the
 // rectangle (0, 0, width, length) of a y-down context.  markScale scales the dots' size and line width.
 extern void EODrawEarthMap(CGContextRef context, UIImage *img, double width, double length, double markScale,
-			   ESWatchTime *tim, ESTimeLocAstroEnvironment *env);
+			   bool drawLocation, ESWatchTime *tim, ESTimeLocAstroEnvironment *env);
 
 
 @interface EOEarthView : EOHandView {

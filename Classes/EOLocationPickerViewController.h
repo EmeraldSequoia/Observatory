@@ -16,26 +16,31 @@
 @end
 
 // A large Earth map.  Touch and drag to move a cursor; lifting sets the location there.  A touch that starts on the
-// green dot (the device's location) and lifts without dragging away picks Location Services instead.
+// blue dot (the device's location) snaps the cursor to the blue dot whenever it is on it, and lifting there picks
+// Location Services instead.  The red dot (the current location) hides while the cursor is moving it elsewhere.
 @interface EOLocationPickerMapView : UIView {
     id<EOLocationPickerMapViewDelegate> delegate;  // not retained
     UIImage             *img;
     UIImage             *nightImg;
     CAShapeLayer        *cursorLayer;
-    CAShapeLayer        *greenDotLayer;
+    CAShapeLayer        *redDotLayer;  // not drawn with the map, so it can hide quickly while a drag moves the location
+    CAShapeLayer        *blueDotLayer;
+    CAShapeLayer        *matLayer;     // the black gap between the map and its border...
+    CAShapeLayer        *borderLayer;  // ...and the border, like the clock's frame around the small map
     UILabel             *coordinateLabel;
-    bool                showGreenDot;
-    double              greenLatitudeDegrees;
-    double              greenLongitudeDegrees;
-    bool                touchStartedOnGreenDot;
-    CGPoint             touchStartPoint;
+    bool                showBlueDot;
+    double              blueLatitudeDegrees;
+    double              blueLongitudeDegrees;
+    bool                touchStartedOnBlueDot;
+    bool                snappedToBlueDot;
 }
 
 @property (nonatomic, assign) id<EOLocationPickerMapViewDelegate> delegate;
 
-- (void)setGreenDotLatitude:(double)latitudeDegrees longitude:(double)longitudeDegrees;
+- (void)setBlueDotLatitude:(double)latitudeDegrees longitude:(double)longitudeDegrees;
 - (void)hideCursor;
 - (void)hideCoordinateLabel;
+- (void)setBorderScale:(double)clockScale;  // points per clock canvas unit, so the border matches the clock's
 
 @end
 
@@ -44,7 +49,6 @@
 @interface EOLocationPickerViewController : UIViewController <EOLocationPickerMapViewDelegate, UIGestureRecognizerDelegate,
 							      UIViewControllerTransitioningDelegate, UIViewControllerAnimatedTransitioning> {
     EOLocationPickerMapView *mapView;
-    UILabel             *hintLabel;
     UIButton            *closeButton;
     UIView              *sourceView;  // not retained
     bool                picked;

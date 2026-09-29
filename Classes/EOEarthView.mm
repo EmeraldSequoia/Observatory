@@ -185,7 +185,7 @@ static void drawBoundariesForAltitudeIntoContext(CGContextRef context,
 }
     
 void EODrawEarthMap(CGContextRef context, UIImage *img, double width, double length, double markScale,
-		    ESWatchTime *tim, ESTimeLocAstroEnvironment *env) {
+		    bool drawLocation, ESWatchTime *tim, ESTimeLocAstroEnvironment *env) {
     tracePrintf("EOEarthView: drawInRect start");
     [img drawInRect:CGRectMake(0, 0, width, length)];
     tracePrintf("EOEarthView: drawInRect done");
@@ -247,11 +247,13 @@ void EODrawEarthMap(CGContextRef context, UIImage *img, double width, double len
     }
     
     // draw current location
-    ESLocation *location = env->location();
-    CGContextSetLineWidth(context, markScale);
-    CGContextSetRGBStrokeColor(context, 1, 0, 0, 1);	// red
-    CGContextAddArc(context, lngToX(location->longitudeRadians()), latToY(location->latitudeRadians()), markScale, 0, twoPi, 0);
-    CGContextDrawPath(context, kCGPathStroke);
+    if (drawLocation) {
+	ESLocation *location = env->location();
+	CGContextSetLineWidth(context, markScale);
+	CGContextSetRGBStrokeColor(context, 1, 0, 0, 1);	// red
+	CGContextAddArc(context, lngToX(location->longitudeRadians()), latToY(location->latitudeRadians()), markScale, 0, twoPi, 0);
+	CGContextDrawPath(context, kCGPathStroke);
+    }
     // printf("env latitude = %+5.1f;   longitude = %+6.1f   [%.0f,%.0f]\n", env.latitude*360/twoPi, env.longitude*360/twoPi, lngToX(env.longitude), latToY(env.latitude));
 
 #endif
@@ -279,7 +281,7 @@ void EODrawEarthMap(CGContextRef context, UIImage *img, double width, double len
 
     CGContextScaleCTM(context, 1, -1);
     CGContextTranslateCTM(context, -width/2, -length/2);
-    EODrawEarthMap(context, img, width, length, 1/*markScale*/, tim, env);
+    EODrawEarthMap(context, img, width, length, 1/*markScale*/, true/*drawLocation*/, tim, env);
 
     CGContextRestoreGState(context);
     traceExit("EOEarthView: drawRect");
