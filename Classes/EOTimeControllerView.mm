@@ -121,11 +121,14 @@ static void setLabelText(UILabel *label, NSString *text) {
                                         font:[UIFont fontWithName:@"Arial" size:15]];
         styleAsPlain(nowButton);
         [nowButton addTarget:self action:@selector(nowPressed:) forControlEvents:UIControlEventTouchDown];
-        // ‖ while the clock runs, ▶ while it is stopped; like Now, they act on the press
+        // ‖ while the clock runs, ◀ ▶ while it is stopped; like Now, they act on the press
         UIFont *transportFont = [UIFont systemFontOfSize:16];
         pauseButton = [self addButtonWithTitle:@"‖" font:transportFont];
         styleAsActive(pauseButton);
         [pauseButton addTarget:self action:@selector(pausePressed:) forControlEvents:UIControlEventTouchDown];
+        reverseButton = [self addButtonWithTitle:@"◀" font:transportFont];
+        styleAsPlain(reverseButton);
+        [reverseButton addTarget:self action:@selector(reversePressed:) forControlEvents:UIControlEventTouchDown];
         playButton = [self addButtonWithTitle:@"▶" font:transportFont];
         styleAsPlain(playButton);
         [playButton addTarget:self action:@selector(playPressed:) forControlEvents:UIControlEventTouchDown];
@@ -242,16 +245,17 @@ static void setLabelText(UILabel *label, NSString *text) {
 }
 
 // The transport, left of the ×: Now ▶ while the time is not the present, then ‖ while the clock runs
-// or ▶ while it is stopped.  The buttons present share the row, as the web's do; laid out again
+// or ◀ ▶ while it is stopped.  The buttons present share the row, as the web's do; laid out again
 // only when that set changes (refresh), so a pressed button keeps its frame under the finger.
 - (void)layoutTransportRow {
     shownAtPresent = [stepper isAtPresent];
     shownRunning = [stepper isRunning];
     nowButton.hidden = shownAtPresent;
     pauseButton.hidden = !shownRunning;
+    reverseButton.hidden = shownRunning;
     playButton.hidden = shownRunning;
     NSMutableArray *row = [NSMutableArray arrayWithCapacity:3];
-    for (UIButton *button in [NSArray arrayWithObjects:nowButton, pauseButton, playButton, nil]) {
+    for (UIButton *button in [NSArray arrayWithObjects:nowButton, pauseButton, reverseButton, playButton, nil]) {
         if (button.hidden) {
             button.highlighted = NO;    // a press can hide the button it landed on, mid-touch
         } else {
@@ -324,6 +328,11 @@ static void setLabelText(UILabel *label, NSString *text) {
 
 - (void)pausePressed:(UIButton *)sender {
     [stepper stop];
+    [self refresh];
+}
+
+- (void)reversePressed:(UIButton *)sender {
+    [stepper playReverse];
     [self refresh];
 }
 

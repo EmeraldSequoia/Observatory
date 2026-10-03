@@ -323,6 +323,12 @@ static const int numBodies = sizeof(bodyPlanets) / sizeof(bodyPlanets[0]);
     [client transportDidChange];
 }
 
+- (void)playReverse {
+    [self endPress];
+    time->setWarp(-1.0);
+    [client transportDidChange];
+}
+
 - (void)now {
     [self endPress];
     time->resetToLocal();

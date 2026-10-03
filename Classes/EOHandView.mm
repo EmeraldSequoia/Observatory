@@ -153,7 +153,8 @@
     NSTimeInterval now = tim->secondsSinceMidnightValueUsingEnv(env);
     bool rotateLayer = !([self isKindOfClass:[EOHandTriangleView class]] || [self isKindOfClass:[EOEclipseView class]]);
     if (first && rotateLayer) {
-	now += EOHANDAMIMATIONDURATION;	    // where it will be when the animation is done
+	// where it will be when the animation is done: a second on, or a second back while the clock runs backward
+	now += tim->runningBackward() ? -EOHANDAMIMATIONDURATION : EOHANDAMIMATIONDURATION;
     }
     
     if (kind >= EOFirstAstro) {

@@ -97,10 +97,12 @@ typedef enum EOTimeScrubState {
 // From the clock's tick: one unit per tick while a scrub runs
 - (void)scrubTick;
 
-// The transport: ‖ freezes the clock where it is, ▶ runs it on from there at real speed,
-// Now returns to the present (running)
+// The transport: ‖ freezes the clock where it is, ▶ runs it on from there at real speed, ◀ runs
+// it backward at real speed (the views schedule by direction: EOScheduledView), Now returns to
+// the present (running)
 - (void)stop;
 - (void)play;
+- (void)playReverse;
 - (void)now;
 - (bool)isRunning;      // the clock is moving
 - (bool)isAtPresent;    // it shows the present, so there is nothing to return to
