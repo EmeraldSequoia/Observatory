@@ -520,8 +520,8 @@ BOOL timeChanged = false;
     }
 }
 
-// Escape on a hardware keyboard: stops a scrub, hands-free or held; else ends a date field's edit (the
-// panel stays open)
+// Escape on a hardware keyboard, last in the hierarchy (MainViewController yields it to anything presented):
+// stops a scrub, hands-free or held; else ends a date field's edit; else closes the panel
 - (void)escapeKeyPressed {
     if ([stepper isScrubbing]) {
 	[stepper endPress];
@@ -529,6 +529,46 @@ BOOL timeChanged = false;
     }
     if (setMode && [timePanel endEditing:YES]) {
 	return;		// a date field gave up the keyboard, and its value applied
+    }
+    [self closeTimePanel];
+}
+
+//// A press on the display closes the panel (the web's rule) and goes on to do whatever it landed on: the
+//// recogniser is a long press of no duration, so it fires on the touch itself; it recognises alongside
+//// every other recogniser and cancels no touches, so the dials still cycle their planet and the map still
+//// opens the location picker.  The controller's own chrome is not the display: the panel, Set / Done,
+//// Now, the strip, Demo, the NTP corner, and the two full-canvas overlays (the alarm's snooze, the
+//// hands-free shield, whose press is a stop and nothing else).
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldReceiveTouch:(UITouch *)touch {
+    if (recognizer != displayPress) {
+	return YES;
+    }
+    if (!setMode) {
+	return NO;
+    }
+    UIView *hit = touch.view;
+    if ([hit isDescendantOfView:timePanel]) {
+	return NO;
+    }
+    for (UIView *chrome in [NSArray arrayWithObjects:resetBut, nowBut, demoBut, NTPStatusBut, snoozeBut, shieldBut, nil]) {
+	if (hit == chrome) {
+	    return NO;
+	}
+    }
+    if (!dateLabel.hidden && CGRectContainsPoint(dateLabel.frame, [touch locationInView:view])) {
+	return NO;	// the strip takes no touches itself; they land on the base view
+    }
+    return YES;
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other {
+    return recognizer == displayPress;
+}
+
+- (void)displayPressed:(UILongPressGestureRecognizer *)recognizer {
+    if (recognizer.state == UIGestureRecognizerStateBegan) {
+	[self closeTimePanel];
     }
 }
 
@@ -2217,6 +2257,13 @@ static bool localeIsCyrillic() {
     timePanel = [[EOTimeControllerView alloc] initWithStepper:stepper clock:self];
     [view addSubview:timePanel];
     [self placeTimePanel];
+    // A press on the display closes it (gestureRecognizer:shouldReceiveTouch: says what the display is)
+    displayPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(displayPressed:)];
+    displayPress.minimumPressDuration = 0;
+    displayPress.cancelsTouchesInView = NO;
+    displayPress.delegate = self;
+    [view addGestureRecognizer:displayPress];
+    [displayPress release];
 
     [self updateLabelsSeasonsAlarmDSTAndStatusIndicator];
     

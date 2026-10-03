@@ -26,7 +26,7 @@ class ClockTimeSyncObserver;
 @class EOEclipseRingImageView, EOEclipseView, EOMoonAgeView;
 @class EOTimeControllerView;
 
-@interface EOClock : NSObject<UIActionSheetDelegate, UIAlertViewDelegate, EOTimeStepperClient> {
+@interface EOClock : NSObject<UIActionSheetDelegate, UIAlertViewDelegate, UIGestureRecognizerDelegate, EOTimeStepperClient> {
     ESWatchTime		*time;
     ESTimeLocAstroEnvironment *env;
     EOBaseView		*view;
@@ -133,6 +133,7 @@ class ClockTimeSyncObserver;
     UIButton		*nowBut;	// "Now ▶" beside Set / Done: back to the present, shown while the time is not it
     EOTimeStepper	*stepper;	// the time controller's model
     EOTimeControllerView *timePanel;	// and its panel
+    UILongPressGestureRecognizer *displayPress;	// a press on the display closes the panel (the base view's; not retained)
     UIButton		*azBut;
     UIButton		*altBut;
     UIButton		*snoozeBut;
