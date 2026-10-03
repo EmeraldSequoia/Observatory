@@ -106,6 +106,7 @@ ESLocationAsString(ESLocation *location) {
 - (void)placeTimePanel;
 - (void)openTimePanel;
 - (void)placeSetAndNowButtonsForOrientation:(UIInterfaceOrientation)orientation;
+- (void)updateScrubShield;
 
 @end
 
@@ -504,6 +505,25 @@ BOOL timeChanged = false;
     [self reorientSubView:nowBut toOrientation:orientation offsetBy:CGPointMake(resetX + halfPair, resetY)];
 }
 
+// The shield: a transparent button over everything while a scrub runs hands-free, so that the next press
+// anywhere stops the scrub and does nothing else (buttonActionDn:); checked from tick
+- (void)updateScrubShield {
+    bool locked = [stepper isLocked];
+    if (shieldBut.hidden == locked) {
+	shieldBut.hidden = !locked;
+	if (locked) {
+	    [view bringSubviewToFront:shieldBut];
+	}
+    }
+}
+
+// Escape on a hardware keyboard: stops a scrub, hands-free or held (the panel stays open)
+- (void)escapeKeyPressed {
+    if ([stepper isScrubbing]) {
+	[stepper endPress];
+    }
+}
+
 //// what the time stepper tells us
 
 - (void)timeDidChange {
@@ -715,6 +735,7 @@ static bool firstAfterComingToForeground = true;
 
     [stepper scrubTick];	// a held ◀ or ▶ moves the time one unit per tick, as the old row did
     [self updateNowButton];
+    [self updateScrubShield];
     if ([self timeStripVisible]) {
 	[self updateTimeStrip];
     }
@@ -806,7 +827,10 @@ static bool firstAfterComingToForeground = true;
 }
 
 - (void)buttonActionDn:(id)sender {
-    if (sender == snoozeBut) {
+    if (sender == shieldBut) {
+	[stepper endPress];	// the press that stops a hands-free scrub, and nothing else
+	shieldBut.hidden = YES;
+    } else if (sender == snoozeBut) {
 	[ECAudio stopRinging];
     } else if (sender == azBut || sender == altBut) {
 	ECPlanetNumber p = azHand.planet;
@@ -973,7 +997,7 @@ static bool firstAfterComingToForeground = true;
 //	time->resetToLocal();
 //	[self resetTargets];
 //	resetBool = yearBool = dayBool = hourBool = monthBool = lunarBool = minuteBool = false;
-    } else if (sender == azBut || sender == altBut || sender == snoozeBut) {
+    } else if (sender == azBut || sender == altBut || sender == snoozeBut || sender == shieldBut) {
 	// do nothing
     } else if (sender == NTPStatusBut || sender == demoBut || sender == nowBut) {
 	// do nothing
@@ -2168,6 +2192,10 @@ static bool localeIsCyrillic() {
     
     snoozeBut = [self createButtonAtX:0 Y:0 width:1024 height:1024 highlight:true text:NULL color:NULL];
     snoozeBut.hidden = true;
+    // The time controller's shield (updateScrubShield), the same idiom; sized past the canvas so that the
+    // portrait placement quirk of reorientSubView: leaves no strip uncovered
+    shieldBut = [self createButtonAtX:0 Y:0 width:1200 height:1200 highlight:false text:NULL color:NULL];
+    shieldBut.hidden = true;
     
     //lastOrientation = saveOrientation;
 //[self initializeConstantsForOrientation:lastOrientation];
@@ -2250,6 +2278,7 @@ static bool localeIsCyrillic() {
 	[self reorientSubView:azBut toOrientation:newOrientation offsetBy:CGPointMake(azX, azY)];
 	[self reorientSubView:altBut toOrientation:newOrientation offsetBy:CGPointMake(altX, altY)];
 	[self reorientSubView:snoozeBut toOrientation:newOrientation offsetBy:CGPointMake(mainX, mainY)];
+	[self reorientSubView:shieldBut toOrientation:newOrientation offsetBy:CGPointMake(mainX, mainY)];
 	[self reorientSubView:azLabel toOrientation:newOrientation offsetBy:CGPointMake(azX, azY+altR/2-planetH/2)];
 	[self reorientSubView:altLabel toOrientation:newOrientation offsetBy:CGPointMake(altX, altY+altR/2-planetH/2)];
 	
@@ -2502,6 +2531,7 @@ static bool localeIsCyrillic() {
     [azBut release];
     [altBut release];
     [snoozeBut release];
+    [shieldBut release];
     [demoBut release];
     [resetBut release];
     [nowBut release];

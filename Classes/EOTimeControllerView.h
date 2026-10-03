@@ -34,9 +34,12 @@
     UIButton       *backButton;
     UIButton       *forwardButton;
     UILabel        *stepLabel;
+    UIImageView    *padlock;        // the hands-free tell, over the panel (see refresh)
     bool           bodyRowShown;    // the ‹ Body › row is laid out (rise / set / transit only)
     EOTimeStepUnit shownUnit;       // the chip currently drawn as selected
     int            shownHeld;       // 0, or the direction of the pair button drawn as held
+    int            shownBadge;      // the padlock as drawn: 0 none, 1 the lock zone, 2 locked
+    bool           offButton;       // the pair's touch has left its button: a lift now would lock
     bool           shownAtPresent;  // the transport row as last laid out: Now hidden, and
     bool           shownRunning;    // ‖ rather than ◀ ▶
     bool           faded;           // the scrub fade is on

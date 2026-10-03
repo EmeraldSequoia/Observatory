@@ -134,7 +134,7 @@ static const int numBodies = sizeof(bodyPlanets) / sizeof(bodyPlanets[0]);
 }
 
 - (NSString *)statusString {
-    if (scrubState == EOTimeScrubHeld) {
+    if ([self isScrubbing]) {
         NSString *rate = [NSString stringWithFormat:NSLocalizedString(@"%d %@/s", @"scrub rate, e.g. '20 day/s' (%d is the rate, %@ the unit abbreviation)"),
                                    ticksPerSecond, [EOTimeStepper labelForUnit:unit]];
         return [NSString stringWithFormat:@"%@ %@", rate, scrubDirection > 0 ? @"▶" : @"◀"];
@@ -290,7 +290,7 @@ static const int numBodies = sizeof(bodyPlanets) / sizeof(bodyPlanets[0]);
         [holdTimer invalidate];
         holdTimer = nil;
     }
-    bool wasScrubbing = (scrubState == EOTimeScrubHeld);
+    bool wasScrubbing = [self isScrubbing];
     scrubState = EOTimeScrubIdle;
     if (wasScrubbing) {
         // The scrub moved a frozen clock by jumps, so there is nothing to stop; the views
@@ -299,12 +299,23 @@ static const int numBodies = sizeof(bodyPlanets) / sizeof(bodyPlanets[0]);
     }
 }
 
+// The latch: the hold engaged and the finger lifted off the button, so the scrub runs on hands-free
+- (void)lockScrub {
+    if (scrubState == EOTimeScrubHeld) {
+        scrubState = EOTimeScrubLocked;
+    }
+}
+
 - (bool)isScrubbing {
-    return scrubState == EOTimeScrubHeld;
+    return scrubState == EOTimeScrubHeld || scrubState == EOTimeScrubLocked;
+}
+
+- (bool)isLocked {
+    return scrubState == EOTimeScrubLocked;
 }
 
 - (void)scrubTick {
-    if (scrubState == EOTimeScrubHeld) {
+    if ([self isScrubbing]) {
         [self stepInDirection:scrubDirection];
     }
 }

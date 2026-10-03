@@ -26,6 +26,9 @@ static const double cornerMarginBottom = 56;    // clear of the Options (i) butt
 static const double scrubAlpha = 0.38;          // the panel while a scrub runs (the web's tuned level)
 static const NSTimeInterval fadeDuration = 0.15;
 static const NSTimeInterval flashDuration = 0.3;    // a pair button after a search that found nothing
+static const double lockBadgeSize = 96;             // the padlock (the web's #tp-lock-badge)
+static const double lockZoneAlpha = 0.75;           // the padlock while a lift would lock
+static const double lockedAlpha = 0.4;              // and once locked, over the faded panel (the two multiply)
 
 static UIColor *rgb(int r, int g, int b) {
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:1];
@@ -106,6 +109,8 @@ static void setLabelText(UILabel *label, NSString *text) {
         bodyRowShown = [EOTimeStepper unitUsesBody:stepper.unit];
         shownUnit = EOTimeStepNumUnits;     // nothing drawn as selected yet
         shownHeld = 0;
+        shownBadge = 0;
+        offButton = false;
         faded = false;
         userMoved = false;
 
@@ -158,8 +163,9 @@ static void setLabelText(UILabel *label, NSString *text) {
         [bodyNextButton addTarget:self action:@selector(bodyStepped:) forControlEvents:UIControlEventTouchUpInside];
         bodyLabel = [self addLabelWithFont:[UIFont fontWithName:@"Arial" size:15] color:rgb(0x88, 0xaa, 0xff)];
 
-        // The pair: tap to step, hold to scrub.  UIControl keeps tracking a touch wherever it goes,
-        // so the release reaches the button however far the finger has wandered.
+        // The pair: tap to step, hold to scrub, lift off the button to scrub hands-free.  UIControl keeps
+        // tracking a touch wherever it goes, so the release reaches the button however far the finger
+        // has wandered, classed inside or outside; the drag events say which side it is on meanwhile.
         UIFont *pairFont = [UIFont systemFontOfSize:20];
         backButton = [self addButtonWithTitle:@"◀" font:pairFont];
         forwardButton = [self addButtonWithTitle:@"▶" font:pairFont];
@@ -167,10 +173,22 @@ static void setLabelText(UILabel *label, NSString *text) {
         styleAsPlain(forwardButton);
         for (UIButton *button in [NSArray arrayWithObjects:backButton, forwardButton, nil]) {
             [button addTarget:self action:@selector(stepTouchDown:) forControlEvents:UIControlEventTouchDown];
-            [button addTarget:self action:@selector(stepTouchUp:)
-                 forControlEvents:(UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchCancel)];
+            [button addTarget:self action:@selector(stepTouchUp:) forControlEvents:(UIControlEventTouchUpInside | UIControlEventTouchCancel)];
+            [button addTarget:self action:@selector(stepTouchUpOutside:) forControlEvents:UIControlEventTouchUpOutside];
+            [button addTarget:self action:@selector(stepTouchDragExit:) forControlEvents:UIControlEventTouchDragExit];
+            [button addTarget:self action:@selector(stepTouchDragEnter:) forControlEvents:UIControlEventTouchDragEnter];
         }
         stepLabel = [self addLabelWithFont:[UIFont fontWithName:@"Arial-BoldMT" size:15] color:rgb(0xcc, 0xcc, 0xdd)];
+
+        // The padlock, the hands-free tell: over the panel at full alpha while a lift would lock, dimmer once
+        // it has.  An image view takes no touches, so the pair keeps tracking beneath it.
+        padlock = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"lock.fill"
+                                                                withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:lockBadgeSize]]];
+        padlock.tintColor = rgb(0x4c, 0xd9, 0x64);
+        padlock.contentMode = UIViewContentModeCenter;
+        padlock.hidden = YES;
+        [self addSubview:padlock];
+        [padlock release];
 
         [self layoutWidgets];
 
@@ -242,6 +260,7 @@ static void setLabelText(UILabel *label, NSString *text) {
     CGRect frame = self.frame;
     frame.size.height = y + padBottom;
     self.frame = frame;
+    padlock.frame = self.bounds;     // centred over the whole panel
 }
 
 // The transport, left of the ×: Now ▶ while the time is not the present, then ‖ while the clock runs
@@ -356,14 +375,40 @@ static void setLabelText(UILabel *label, NSString *text) {
 }
 
 - (void)stepTouchDown:(UIButton *)sender {
+    offButton = false;
     if (![stepper pressInDirection:(sender == forwardButton ? 1 : -1)]) {
         [self flashFailure:sender];     // an astro search found no event here
     }
     [self refresh];
 }
 
+// A lift on the button, or a cancelled touch (a system gesture, a rotation): the scrub ends
 - (void)stepTouchUp:(UIButton *)sender {
+    offButton = false;
     [stepper endPress];
+    [self refresh];
+}
+
+// A lift off the button: the latch, once the hold has engaged (the scrub runs on hands-free until the
+// next press); before that it was a sloppy tap — one step, no latch
+- (void)stepTouchUpOutside:(UIButton *)sender {
+    offButton = false;
+    if ([stepper isScrubbing]) {
+        [stepper lockScrub];
+    } else {
+        [stepper endPress];
+    }
+    [self refresh];
+}
+
+// The held finger leaves the button and comes back: the padlock shows what a lift would do
+- (void)stepTouchDragExit:(UIButton *)sender {
+    offButton = true;
+    [self refresh];
+}
+
+- (void)stepTouchDragEnter:(UIButton *)sender {
+    offButton = false;
     [self refresh];
 }
 
@@ -401,7 +446,9 @@ static void setLabelText(UILabel *label, NSString *text) {
 
     // The held button's look and the fade follow the scrub: on while it runs, off the moment it stops.
     // The fade is alpha only, never hidden: the held button must keep receiving its touch.
-    int held = [stepper isScrubbing] ? stepper.scrubDirection : 0;
+    bool scrubbing = [stepper isScrubbing];
+    bool locked = [stepper isLocked];
+    int held = scrubbing ? stepper.scrubDirection : 0;
     if (held != shownHeld) {
         styleAsPlain(backButton);
         styleAsPlain(forwardButton);
@@ -412,7 +459,17 @@ static void setLabelText(UILabel *label, NSString *text) {
         }
         shownHeld = held;
     }
-    bool shouldFade = (held != 0);
+    // The lock zone: the held finger is off the button, where a lift would lock.  The panel comes back to
+    // full alpha with the padlock, so the outcome is visible before it happens; back on the button it
+    // fades again.  Locked, the padlock stays, dimmer, over the faded panel.
+    bool lockZone = scrubbing && !locked && offButton;
+    int badge = locked ? 2 : (lockZone ? 1 : 0);
+    if (badge != shownBadge) {
+        padlock.hidden = (badge == 0);
+        padlock.alpha = (badge == 2) ? lockedAlpha : lockZoneAlpha;
+        shownBadge = badge;
+    }
+    bool shouldFade = scrubbing && !lockZone;
     if (shouldFade != faded) {
         faded = shouldFade;
         [UIView animateWithDuration:fadeDuration animations:^{
@@ -423,6 +480,7 @@ static void setLabelText(UILabel *label, NSString *text) {
 
 - (void)prepareToHide {
     [stepper endPress];
+    offButton = false;
     [self refresh];
 }
 

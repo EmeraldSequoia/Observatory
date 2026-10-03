@@ -136,6 +136,7 @@ class ClockTimeSyncObserver;
     UIButton		*azBut;
     UIButton		*altBut;
     UIButton		*snoozeBut;
+    UIButton		*shieldBut;	// over everything while a scrub runs hands-free: the next press anywhere stops it
     UIButton		*NTPStatusBut;
 
     ClockTimeSyncObserver *timeSyncObserver;
@@ -191,6 +192,7 @@ class ClockTimeSyncObserver;
 - (void)closeTimePanel;
 - (void)timeDidChange;		// from the time stepper: the display must redraw
 - (void)transportDidChange;	// from the time stepper: the views re-arm their schedules
+- (void)escapeKeyPressed;	// from MainViewController's key commands
 - (void)goingToBackground;
 - (void)goingToForeground;
 - (void)adjustAlarmTime;

@@ -45,7 +45,8 @@ typedef enum EOTimeStepUnit {
 typedef enum EOTimeScrubState {
     EOTimeScrubIdle = 0,    // no finger on the pair
     EOTimeScrubPending,     // pressed; the hold timer is armed
-    EOTimeScrubHeld         // the hold engaged: time moves until the release
+    EOTimeScrubHeld,        // the hold engaged: time moves until the release
+    EOTimeScrubLocked       // hands-free: the finger lifted off the button; time moves until the next press
 } EOTimeScrubState;
 
 @interface EOTimeStepper : NSObject {
@@ -88,11 +89,15 @@ typedef enum EOTimeScrubState {
 - (void)stepInDirection:(int)direction;
 
 // The pair's touches.  A press steps at once — for an astro unit it searches and jumps, and
-// answers false when there is no such event here — and, for a calendar unit, arms the hold;
-// the release ends any scrub.
+// answers false when there is no such event here — and, for a calendar unit, arms the hold.
+// A release on the button ends the scrub (endPress); a release off it after the hold has engaged
+// makes the scrub hands-free (lockScrub): it runs on until endPress — the next press anywhere,
+// Escape, the background, a rotation, the panel closing.
 - (bool)pressInDirection:(int)direction;
 - (void)endPress;
-- (bool)isScrubbing;    // the hold has engaged
+- (void)lockScrub;
+- (bool)isScrubbing;    // the hold has engaged (held, or hands-free)
+- (bool)isLocked;       // hands-free
 
 // From the clock's tick: one unit per tick while a scrub runs
 - (void)scrubTick;

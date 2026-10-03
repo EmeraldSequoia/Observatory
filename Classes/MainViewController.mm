@@ -74,7 +74,25 @@
     [[EOClock theClock] setStatusBar:nil];
     [EOClock theClock].dateLabel.hidden = ![[EOClock theClock] timeStripVisible];
     [super viewDidAppear:animated];
+    [self becomeFirstResponder];    // for keyCommands
     traceExit ("viewDidAppear");
+}
+
+//// Hardware keyboard: Escape stops a time-controller scrub.  Only while nothing is presented: the
+//// Options screen and alerts own the key otherwise.
+
+- (BOOL)canBecomeFirstResponder {
+    return YES;
+}
+
+- (NSArray *)keyCommands {
+    return [NSArray arrayWithObject:[UIKeyCommand keyCommandWithInput:UIKeyInputEscape modifierFlags:0 action:@selector(escapePressed:)]];
+}
+
+- (void)escapePressed:(UIKeyCommand *)command {
+    if (self.presentedViewController == nil) {
+        [[EOClock theClock] escapeKeyPressed];
+    }
 }
 
 -(void)setStatusBarHidden:(bool)newHidden {
