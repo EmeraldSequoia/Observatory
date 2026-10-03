@@ -29,6 +29,7 @@ static const NSTimeInterval flashDuration = 0.3;    // a pair button after a sea
 static const double lockBadgeSize = 96;             // the padlock (the web's #tp-lock-badge)
 static const double lockZoneAlpha = 0.75;           // the padlock while a lift would lock
 static const double lockedAlpha = 0.4;              // and once locked, over the faded panel (the two multiply)
+static const double keyboardMargin = 8;             // kept between the panel's bottom and the software keyboard
 
 static UIColor *rgb(int r, int g, int b) {
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:1];
@@ -68,10 +69,24 @@ static void styleAsChip(UIButton *button, bool selected, bool astro) {
     }
 }
 
-// Write a label only when its text changes: refresh runs twenty times a second
+static void styleAsEra(UIButton *button, bool bce) {     // the web's #tp-bce, and its .active: BCE in red
+    if (bce) {
+        styleButton(button, rgb(0x2a, 0x2a, 0x3e), rgb(0xaa, 0x44, 0x44), rgb(0xff, 0x44, 0x44));
+    } else {
+        styleButton(button, rgb(0x2a, 0x2a, 0x3e), rgb(0x3a, 0x3a, 0x5e), rgb(0x99, 0x99, 0xbb));
+    }
+}
+
+// Write a label or a field only when its text changes: refresh runs twenty times a second
 static void setLabelText(UILabel *label, NSString *text) {
     if (![label.text isEqualToString:text]) {
         label.text = text;
+    }
+}
+
+static void setFieldText(UITextField *field, NSString *text) {
+    if (![field.text isEqualToString:text]) {
+        field.text = text;
     }
 }
 
@@ -102,6 +117,28 @@ static void setLabelText(UILabel *label, NSString *text) {
     return label;
 }
 
+// A date field: digits from the number pad, the web's monospace look
+- (UITextField *)addFieldWithPlaceholder:(NSString *)placeholder {
+    UITextField *field = [[UITextField alloc] initWithFrame:CGRectZero];
+    field.font = [UIFont monospacedDigitSystemFontOfSize:15 weight:UIFontWeightMedium];
+    field.textColor = rgb(0xdd, 0xdd, 0xdd);
+    field.tintColor = rgb(0x88, 0xaa, 0xff);
+    field.textAlignment = NSTextAlignmentCenter;
+    field.backgroundColor = rgb(0x2a, 0x2a, 0x3e);
+    field.layer.cornerRadius = 6;
+    field.layer.borderWidth = 1;
+    field.layer.borderColor = rgb(0x44, 0x44, 0x44).CGColor;
+    field.placeholder = placeholder;
+    field.keyboardType = UIKeyboardTypeNumberPad;
+    field.keyboardAppearance = UIKeyboardAppearanceDark;
+    field.returnKeyType = UIReturnKeyDone;
+    field.autocorrectionType = UITextAutocorrectionTypeNo;
+    field.delegate = self;
+    [self addSubview:field];
+    [field release];
+    return field;
+}
+
 - (id)initWithStepper:(EOTimeStepper *)aStepper clock:(EOClock *)aClock {
     if ((self = [super initWithFrame:CGRectMake(0, 0, panelWidth, 100)])) {
         stepper = aStepper;
@@ -112,6 +149,8 @@ static void setLabelText(UILabel *label, NSString *text) {
         shownBadge = 0;
         offButton = false;
         faded = false;
+        shownBCE = false;
+        keyboardLift = 0;
         userMoved = false;
 
         self.opaque = NO;
@@ -180,6 +219,20 @@ static void setLabelText(UILabel *label, NSString *text) {
         }
         stepLabel = [self addLabelWithFont:[UIFont fontWithName:@"Arial-BoldMT" size:15] color:rgb(0xcc, 0xcc, 0xdd)];
 
+        // The date fields, the web's two rows: year / month / day, then CE·BCE / hour / minute.  A value
+        // applies when its field ends editing; the era, at once.
+        dateCaption = [self addLabelWithFont:[UIFont fontWithName:@"Arial" size:10] color:rgb(0x66, 0x66, 0x77)];
+        dateCaption.text = [NSLocalizedString(@"Set date & time", @"caption above the date fields") uppercaseString];
+        yearField = [self addFieldWithPlaceholder:@"YYYY"];
+        monthField = [self addFieldWithPlaceholder:@"MM"];
+        dayField = [self addFieldWithPlaceholder:@"DD"];
+        eraButton = [self addButtonWithTitle:NSLocalizedString(@"CE", @"era toggle: Common Era") font:[UIFont fontWithName:@"Arial" size:12]];
+        eraButton.layer.cornerRadius = 6;
+        styleAsEra(eraButton, false);
+        [eraButton addTarget:self action:@selector(eraTapped:) forControlEvents:UIControlEventTouchUpInside];
+        hourField = [self addFieldWithPlaceholder:@"HH"];
+        minuteField = [self addFieldWithPlaceholder:@"mm"];
+
         // The padlock, the hands-free tell: over the panel at full alpha while a lift would lock, dimmer once
         // it has.  An image view takes no touches, so the pair keeps tracking beneath it.
         padlock = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"lock.fill"
@@ -199,12 +252,18 @@ static void setLabelText(UILabel *label, NSString *text) {
         [self addGestureRecognizer:drag];
         [drag release];
 
+        // The software keyboard (an iPad without a hardware one) covers the bottom of the screen, where the
+        // panel sits: the panel lifts clear of it while a field is edited (keyboardWillChangeFrame:)
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillChangeFrame:)
+                                                     name:UIKeyboardWillChangeFrameNotification object:nil];
+
         [self refresh];
     }
     return self;
 }
 
 - (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
     [NSObject cancelPreviousPerformRequestsWithTarget:self];
     // The widgets are the view hierarchy's; the stepper and the clock are not ours
     [super dealloc];
@@ -255,7 +314,20 @@ static void setLabelText(UILabel *label, NSString *text) {
     backButton.frame = CGRectMake(padSide, y, pairHeight, pairHeight);
     forwardButton.frame = CGRectMake(padSide + inner - pairHeight, y, pairHeight, pairHeight);
     stepLabel.frame = CGRectMake(padSide + pairHeight + 6, y, inner - 2 * pairHeight - 12, pairHeight);
-    y += pairHeight + 4;
+    y += pairHeight + 8;
+
+    // SET DATE & TIME: two rows of three cells
+    dateCaption.frame = CGRectMake(padSide, y, inner, 12);
+    y += 12 + 5;
+    double cellWidth = (inner - 2 * gap) / 3;
+    yearField.frame = CGRectMake(padSide, y, cellWidth, rowHeight);
+    monthField.frame = CGRectMake(padSide + cellWidth + gap, y, cellWidth, rowHeight);
+    dayField.frame = CGRectMake(padSide + 2 * (cellWidth + gap), y, cellWidth, rowHeight);
+    y += rowHeight + gap;
+    eraButton.frame = CGRectMake(padSide, y, cellWidth, rowHeight);
+    hourField.frame = CGRectMake(padSide + cellWidth + gap, y, cellWidth, rowHeight);
+    minuteField.frame = CGRectMake(padSide + 2 * (cellWidth + gap), y, cellWidth, rowHeight);
+    y += rowHeight + 4;
 
     CGRect frame = self.frame;
     frame.size.height = y + padBottom;
@@ -320,7 +392,7 @@ static void setLabelText(UILabel *label, NSString *text) {
     double maxY = halfH - size.height / 2;
     offset.x = fmax(-maxX, fmin(maxX, offset.x));
     offset.y = fmax(-maxY, fmin(maxY, offset.y));
-    self.center = CGPointMake(center.x + offset.x, center.y - offset.y);
+    self.center = CGPointMake(center.x + offset.x, center.y - offset.y - keyboardLift);
 }
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldReceiveTouch:(UITouch *)touch {
@@ -423,6 +495,96 @@ static void setLabelText(UILabel *label, NSString *text) {
     styleAsPlain(button);
 }
 
+//// The date fields
+
+- (UITextField *)editingField {
+    for (UITextField *field in [NSArray arrayWithObjects:yearField, monthField, dayField, hourField, minuteField, nil]) {
+        if ([field isFirstResponder]) {
+            return field;
+        }
+    }
+    return nil;
+}
+
+// Digits only, and no more of them than the field can mean (a hardware keyboard types anything)
+- (BOOL)textField:(UITextField *)textField shouldChangeCharactersInRange:(NSRange)range replacementString:(NSString *)string {
+    if ([string length] == 0) {
+        return YES;     // a deletion
+    }
+    if ([string rangeOfCharacterFromSet:[[NSCharacterSet decimalDigitCharacterSet] invertedSet]].location != NSNotFound) {
+        return NO;
+    }
+    NSUInteger length = [textField.text length] - range.length + [string length];
+    return length <= (textField == yearField ? 4 : 2);
+}
+
+- (void)textFieldDidBeginEditing:(UITextField *)textField {
+    // The whole value selected, so that typing replaces it
+    textField.selectedTextRange = [textField textRangeFromPosition:textField.beginningOfDocument toPosition:textField.endOfDocument];
+}
+
+- (BOOL)textFieldShouldReturn:(UITextField *)textField {
+    [textField resignFirstResponder];   // ends the edit, and the value applies (textFieldDidEndEditing:)
+    return NO;
+}
+
+- (void)textFieldDidEndEditing:(UITextField *)textField {
+    [self applyDateFields];
+}
+
+// The typed date and time, through the stepper.  A field left empty leaves the time alone; the next
+// refresh fills it in again.
+- (void)applyDateFields {
+    for (UITextField *field in [NSArray arrayWithObjects:yearField, monthField, dayField, hourField, minuteField, nil]) {
+        if ([field.text length] == 0) {
+            return;
+        }
+    }
+    [stepper setEra:(shownBCE ? 0 : 1) year:[yearField.text intValue] month:[monthField.text intValue] day:[dayField.text intValue]
+               hour:[hourField.text intValue] minute:[minuteField.text intValue]];
+    [self refresh];
+}
+
+- (void)showEra:(bool)bce {
+    shownBCE = bce;
+    [eraButton setTitle:(bce ? NSLocalizedString(@"BCE", @"era toggle: Before Common Era") : NSLocalizedString(@"CE", @"era toggle: Common Era"))
+               forState:UIControlStateNormal];
+    styleAsEra(eraButton, bce);
+}
+
+- (void)eraTapped:(UIButton *)sender {
+    [self showEra:!shownBCE];
+    [self applyDateFields];
+}
+
+// A touch on the panel's background or captions ends an edit, and so applies it
+- (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
+    [self endEditing:YES];
+    [super touchesBegan:touches withEvent:event];
+}
+
+// The software keyboard's frame, in the canvas: the panel lifts clear of it, as far as the canvas's top
+// allows, and comes back down when it goes (the frame then lies below the screen)
+- (void)keyboardWillChangeFrame:(NSNotification *)notification {
+    if (self.hidden || !self.superview) {
+        return;
+    }
+    CGRect keyboard = [self.superview convertRect:[[notification.userInfo objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue] fromView:nil];
+    CGSize size = self.bounds.size;
+    double top = clockCenter.y - offset.y - size.height / 2;        // the panel's edges, unlifted
+    double bottom = top + size.height;
+    double lift = fmax(0, bottom + keyboardMargin - CGRectGetMinY(keyboard));
+    lift = fmin(lift, fmax(0, top));
+    if (lift == keyboardLift) {
+        return;
+    }
+    keyboardLift = lift;
+    NSTimeInterval duration = [[notification.userInfo objectForKey:UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+    [UIView animateWithDuration:duration animations:^{
+        [self placeWithClockCenter:clockCenter halfWidth:halfWidth halfHeight:halfHeight];
+    }];
+}
+
 //// Keeping the panel current
 
 - (void)refresh {
@@ -436,6 +598,30 @@ static void setLabelText(UILabel *label, NSString *text) {
     NSString *bodyName = [Utilities nameOfPlanetWithNumber:(ECPlanetNumber)[stepper bodyPlanetNumber]];
     setLabelText(bodyLabel, bodyName);
     setLabelText(stepLabel, [stepper stepLabelWithBodyName:bodyName]);
+
+    // The date fields follow the time, all but the one being edited (a running clock must not overwrite
+    // keystrokes); the era button always does
+    ESDateComponents cs;
+    [stepper dateComponents:&cs];
+    UITextField *editing = [self editingField];
+    if (editing != yearField) {
+        setFieldText(yearField, [NSString stringWithFormat:@"%d", cs.year]);
+    }
+    if (editing != monthField) {
+        setFieldText(monthField, [NSString stringWithFormat:@"%d", cs.month]);
+    }
+    if (editing != dayField) {
+        setFieldText(dayField, [NSString stringWithFormat:@"%d", cs.day]);
+    }
+    if (editing != hourField) {
+        setFieldText(hourField, [NSString stringWithFormat:@"%d", cs.hour]);
+    }
+    if (editing != minuteField) {
+        setFieldText(minuteField, [NSString stringWithFormat:@"%d", cs.minute]);
+    }
+    if ((cs.era == 0) != shownBCE) {
+        [self showEra:(cs.era == 0)];
+    }
 
     if (unit != shownUnit) {
         for (int i = 0; i < EOTimeStepNumUnits; i++) {
@@ -479,6 +665,8 @@ static void setLabelText(UILabel *label, NSString *text) {
 }
 
 - (void)prepareToHide {
+    [self endEditing:YES];      // a pending edit applies; the keyboard goes
+    keyboardLift = 0;
     [stepper endPress];
     offButton = false;
     [self refresh];

@@ -457,6 +457,9 @@ BOOL timeChanged = false;
 	return;
     }
     NSString *status = [stepper statusString];
+    if ([stepper isAtLimit]) {
+	status = [NSString stringWithFormat:@"%@  %@", status, NSLocalizedString(@"AT LIMIT", @"strip suffix: the time is clamped at the end of the supported range (4000 BCE to 2800 CE)")];
+    }
     NSString *when = [dateFormatter stringFromDate:[NSDate dateWithTimeIntervalSinceReferenceDate:time->currentTime()]];
     if (!time->isCorrect()) {
 	dateLabel.text = [NSString stringWithFormat:@"%@  <%s>  %@  %@",
@@ -517,10 +520,15 @@ BOOL timeChanged = false;
     }
 }
 
-// Escape on a hardware keyboard: stops a scrub, hands-free or held (the panel stays open)
+// Escape on a hardware keyboard: stops a scrub, hands-free or held; else ends a date field's edit (the
+// panel stays open)
 - (void)escapeKeyPressed {
     if ([stepper isScrubbing]) {
 	[stepper endPress];
+	return;
+    }
+    if (setMode && [timePanel endEditing:YES]) {
+	return;		// a date field gave up the keyboard, and its value applied
     }
 }
 

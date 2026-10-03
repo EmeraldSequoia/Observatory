@@ -354,4 +354,47 @@ static const int numBodies = sizeof(bodyPlanets) / sizeof(bodyPlanets[0]);
     return time->isCorrect();
 }
 
+//// the date fields
+
+- (void)dateComponents:(ESDateComponents *)cs {
+    ESCalendar_localDateComponentsFromTimeInterval(time->currentTime(), env->estz(), cs);
+}
+
+static int clampInt(int value, int low, int high) {
+    return value < low ? low : (value > high ? high : value);
+}
+
+// A typed date and time, in the clock's zone through the hybrid calendar (Julian before 1582-10-15),
+// at the zone's offset for that instant; seconds go to zero.  Outside the range the astronomy supports
+// (4000 BCE to 2801 CE) the time is clamped to the range's end, and the clock freezes there as it does
+// anywhere.
+- (bool)setEra:(int)era year:(int)year month:(int)month day:(int)day hour:(int)hour minute:(int)minute {
+    [self endPress];
+    ESDateComponents cs;
+    cs.era = era ? 1 : 0;
+    cs.year = clampInt(year, 1, 9999);
+    cs.month = clampInt(month, 1, 12);
+    cs.day = clampInt(day, 1, 31);
+    cs.hour = clampInt(hour, 0, 23);
+    cs.minute = clampInt(minute, 0, 59);
+    cs.seconds = 0;
+    ESTimeInterval target = ESCalendar_timeIntervalFromLocalDateComponents(env->estz(), &cs);
+    bool inRange = true;
+    if (target < ESMinimumSupportedAstroDate) {
+        target = ESMinimumSupportedAstroDate;
+        inRange = false;
+    } else if (target > ESMaximumSupportedAstroDate) {
+        target = ESMaximumSupportedAstroDate;
+        inRange = false;
+    }
+    time->setToFrozenDateInterval(target);
+    [client timeDidChange];
+    return inRange;
+}
+
+- (bool)isAtLimit {
+    ESTimeInterval t = time->currentTime();
+    return t <= ESMinimumSupportedAstroDate || t >= ESMaximumSupportedAstroDate;
+}
+
 @end

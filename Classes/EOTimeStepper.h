@@ -13,6 +13,7 @@
 
 #import <Foundation/Foundation.h>
 #include "ESTime.hpp"
+#include "ESCalendar.hpp"
 
 class ESWatchTime;
 class ESTimeLocAstroEnvironment;
@@ -111,5 +112,13 @@ typedef enum EOTimeScrubState {
 - (void)now;
 - (bool)isRunning;      // the clock is moving
 - (bool)isAtPresent;    // it shows the present, so there is nothing to return to
+
+// The date fields: the displayed time's components in the clock's zone; a typed date and time
+// (seconds zero), composed through the hybrid calendar and clamped to the range the astronomy
+// supports, where the clock freezes — answers false when it had to clamp; and whether the time
+// sits at that range's end
+- (void)dateComponents:(ESDateComponents *)cs;
+- (bool)setEra:(int)era year:(int)year month:(int)month day:(int)day hour:(int)hour minute:(int)minute;
+- (bool)isAtLimit;
 
 @end

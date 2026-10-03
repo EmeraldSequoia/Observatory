@@ -3,8 +3,9 @@
 //  Emerald Observatory
 //
 //  The time controller panel: the unit chips, the ‹ Body › row for the rise /
-//  set / transit events, the ◀ ▶ pair (tap to step, hold to scrub), the
-//  transport row and the status line.  It drives an EOTimeStepper and reads
+//  set / transit events, the ◀ ▶ pair (tap to step, hold to scrub, lift off to
+//  run hands-free), the transport row, the status line and the date fields.
+//  It drives an EOTimeStepper and reads
 //  it back once per clock tick (refresh).  Laid out in canvas units like the
 //  rest of the clock; opens at the lower right and can be dragged from its
 //  captions or background.
@@ -17,7 +18,7 @@
 
 @class EOClock;
 
-@interface EOTimeControllerView : UIView <UIGestureRecognizerDelegate> {
+@interface EOTimeControllerView : UIView <UIGestureRecognizerDelegate, UITextFieldDelegate> {
     EOTimeStepper  *stepper;        // EOClock's; not retained
     EOClock        *clock;          // not retained
     UIButton       *nowButton;      // Now ▶, while the time is not the present
@@ -35,6 +36,13 @@
     UIButton       *forwardButton;
     UILabel        *stepLabel;
     UIImageView    *padlock;        // the hands-free tell, over the panel (see refresh)
+    UILabel        *dateCaption;    // SET DATE & TIME
+    UITextField    *yearField;      // the date fields: year / month / day, then CE·BCE / hour / minute
+    UITextField    *monthField;
+    UITextField    *dayField;
+    UIButton       *eraButton;
+    UITextField    *hourField;
+    UITextField    *minuteField;
     bool           bodyRowShown;    // the ‹ Body › row is laid out (rise / set / transit only)
     EOTimeStepUnit shownUnit;       // the chip currently drawn as selected
     int            shownHeld;       // 0, or the direction of the pair button drawn as held
@@ -43,6 +51,8 @@
     bool           shownAtPresent;  // the transport row as last laid out: Now hidden, and
     bool           shownRunning;    // ‖ rather than ◀ ▶
     bool           faded;           // the scrub fade is on
+    bool           shownBCE;        // the era button as drawn
+    double         keyboardLift;    // canvas units the panel is raised by, clear of the software keyboard
     bool           userMoved;       // the user dragged the panel: offset is theirs, not the corner's
     CGPoint        offset;          // the panel's centre relative to the clock centre, y up, canvas units
     CGPoint        clockCenter;     // the last placement's parameters, for re-clamping after a drag
