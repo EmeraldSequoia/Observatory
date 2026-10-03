@@ -35,6 +35,8 @@
 #import "EOMoonView.h"
 #import "EOEarthView.h"
 #import "EOShuffleView.h"
+#import "EOTimeStepper.h"
+#import "EOTimeControllerView.h"
 #import "ECErrorReporter.h"
 #import "ESTime.hpp"
 #import "ECAudio.h"
@@ -99,6 +101,12 @@ ESLocationAsString(ESLocation *location) {
 - (void)buttonRepeater;
 - (void)moveClockWidgetsForOrientation:(UIInterfaceOrientation)newOrientation newSize:(CGSize)newSize;
 - (void)notifyTimeAdjustment;
+- (void)updateTimeStrip;
+- (void)updateTimeStripVisibility;
+- (void)placeTimePanel;
+- (void)openTimePanel;
+- (void)placeSetAndNowButtonsForOrientation:(UIInterfaceOrientation)orientation;
+- (void)updateScrubShield;
 
 @end
 
@@ -273,7 +281,7 @@ static NSString *const kEOAlarmNotificationIdentifier = @"EOAlarm";
     if (appDelegate) {
         MainViewController *mainViewController = appDelegate.mainViewController;
         if (mainViewController) {
-            mainViewController.statusBarHidden = !finishingHelp && ([self screenIsMirrored] || setMode);
+            mainViewController.statusBarHidden = !finishingHelp && ([self screenIsMirrored] || [self timeStripVisible]);
         }
     }
 }
@@ -434,62 +442,152 @@ static NSString *const kEOAlarmNotificationIdentifier = @"EOAlarm";
     [view addSubview:dateLabel];
 }
 
-ESTimeInterval lastButtonPress = 0;
 BOOL timeChanged = false;
 
-- (void)doJumps {
-    if (ESSystemTimeBase::currentSystemTime() - lastButtonPress < 0.75) { // Wait at least 1.5 seconds before repeating
+//// the time controller's strip along the top of the canvas: the displayed time, how far it is from the
+//// present, the location, and what the clock is doing.  Shown while the controller is open or the time
+//// is not the present; the status bar hides to make room (see setStatusBar:)
+
+- (bool)timeStripVisible {
+    return setMode || !time->isCorrect();
+}
+
+- (void)updateTimeStrip {
+    if (aboutToReorient) {
 	return;
     }
-    if (minuteStep != 0) {
-	time->advanceBySeconds(60*minuteStep);
-	timeChanged = true;
+    NSString *status = [stepper statusString];
+    if ([stepper isAtLimit]) {
+	status = [NSString stringWithFormat:@"%@  %@", status, NSLocalizedString(@"AT LIMIT", @"strip suffix: the time is clamped at the end of the supported range (4000 BCE to 2800 CE)")];
     }
-    if (hourStep != 0) {
-	time->advanceBySeconds(3600*hourStep);
-	timeChanged = true;
-    }
-    if (dayStep != 0) {
-	time->advanceByDays(dayStep, env/*usingEnv*/);
-	timeChanged = true;
-    }
-    if (monthStep != 0) {
-	time->advanceByMonths(monthStep, env/*usingEnv*/);
-	timeChanged = true;
-    }
-    if (yearStep != 0) {
-	time->advanceByYears(yearStep, env/*usingEnv*/);
-	timeChanged = true;
-    }
-    if (centStep != 0) {
-	time->advanceByYears(centStep*100, env/*usingEnv*/);
-	timeChanged = true;
-    }
-    if (lunarStep != 0) {
-	ESAstronomyManager *astro = env->astronomyManager();
-	astro->setupLocalEnvironmentForThreadFromActionButton(false, time);
-	if (lunarStep == -1) {
-	    time->setToFrozenDateInterval(astro->prevMoonPhase());
-	} else {
-	    time->setToFrozenDateInterval(astro->nextMoonPhase());
-	}
-	astro->cleanupLocalEnvironmentForThreadFromActionButton(false);
-	//	[time advanceBySeconds:29.530589 * 3600 * 24];	// 1.0 did a lunar month
-	timeChanged = true;
-    }
-    if (!time->isCorrect() && !aboutToReorient) {
-	dateLabel.text = [NSString stringWithFormat:@"%@  <%s>  %@",
-			  [dateFormatter stringFromDate:[NSDate dateWithTimeIntervalSinceReferenceDate:time->currentTime()]],
+    NSString *when = [dateFormatter stringFromDate:[NSDate dateWithTimeIntervalSinceReferenceDate:time->currentTime()]];
+    if (!time->isCorrect()) {
+	dateLabel.text = [NSString stringWithFormat:@"%@  <%s>  %@  %@",
+			  when,
 			  time->representationOfDeltaOffsetUsingEnv(env).c_str(),
-                          ESLocationAsString(env->location())];
+			  ESLocationAsString(env->location()),
+			  status];
 	dateLabel.textColor = [UIColor colorWithRed:.75 green:0 blue:0 alpha:1];
-    } else if (resetBool && !aboutToReorient) {
-	dateLabel.text = [NSString stringWithFormat:@"%@  --  %@",
-			  [dateFormatter stringFromDate:[NSDate dateWithTimeIntervalSinceReferenceDate:time->currentTime()]],
-                          ESLocationAsString(env->location())];
+    } else {
+	dateLabel.text = [NSString stringWithFormat:@"%@  --  %@  %@",
+			  when,
+			  ESLocationAsString(env->location()),
+			  status];
 	dateLabel.textColor = [UIColor whiteColor];
     }
-    //[view backgroundCheck];
+}
+
+// Show or hide the strip (and the status bar with it) as the controller opens and closes and as the time
+// leaves and returns to the present.  The reorientation and Help choreography set both themselves.
+- (void)updateTimeStripVisibility {
+    if (aboutToReorient || finishingHelp) {
+	return;
+    }
+    bool visible = [self timeStripVisible];
+    if (dateLabel.hidden == !visible) {
+	return;
+    }
+    dateLabel.hidden = !visible;
+    [self setStatusBar:NULL];
+}
+
+// "Now ▶" beside Set / Done: shown while the time is not the present, whatever moved it there (the
+// controller, or the eclipse demo); checked from tick
+- (void)updateNowButton {
+    bool hidden = time->isCorrect();
+    if (nowBut.hidden != hidden) {
+	nowBut.hidden = hidden;
+	[self placeSetAndNowButtonsForOrientation:lastOrientation];	// Set slides over to make the pair, and back
+    }
+}
+
+// Set / Done sits at resetX on its own; while "Now ▶" shows, the two are centred there as a pair
+- (void)placeSetAndNowButtonsForOrientation:(UIInterfaceOrientation)orientation {
+    double halfPair = (advButtonWidth + 24 + nowButtonGap) / 2;
+    [self reorientSubView:resetBut toOrientation:orientation offsetBy:CGPointMake(nowBut.hidden ? resetX : resetX - halfPair, resetY)];
+    [self reorientSubView:nowBut toOrientation:orientation offsetBy:CGPointMake(resetX + halfPair, resetY)];
+}
+
+// The shield: a transparent button over everything while a scrub runs hands-free, so that the next press
+// anywhere stops the scrub and does nothing else (buttonActionDn:); checked from tick
+- (void)updateScrubShield {
+    bool locked = [stepper isLocked];
+    if (shieldBut.hidden == locked) {
+	shieldBut.hidden = !locked;
+	if (locked) {
+	    [view bringSubviewToFront:shieldBut];
+	}
+    }
+}
+
+// Escape on a hardware keyboard: stops a scrub, hands-free or held; else ends a date field's edit (the
+// panel stays open)
+- (void)escapeKeyPressed {
+    if ([stepper isScrubbing]) {
+	[stepper endPress];
+	return;
+    }
+    if (setMode && [timePanel endEditing:YES]) {
+	return;		// a date field gave up the keyboard, and its value applied
+    }
+}
+
+//// what the time stepper tells us
+
+- (void)timeDidChange {
+    timeChanged = true;
+    [self updateTimeStripVisibility];
+}
+
+- (void)transportDidChange {
+    [self resetTargets];
+    timeChanged = true;
+    [self updateTimeStripVisibility];
+}
+
+- (int)dialPlanetNumber {
+    return altHand.planet;	// the controller's body for rise / set / transit until the user picks one
+}
+
+//// the time controller panel
+
+- (void)placeTimePanel {
+    // Its corner and limits are those of the nominal canvas around the clock centre
+    [timePanel placeWithClockCenter:[EOClock clockCenter] halfWidth:fullWidth/2 halfHeight:fullHeight/2];
+}
+
+- (void)openTimePanel {
+    if (setMode) {
+	return;
+    }
+    setMode = true;
+    [view bringSubviewToFront:timePanel];
+    [timePanel refresh];
+    timePanel.hidden = false;
+#ifndef NDEBUG
+    demoBut.hidden = false;
+#endif
+    [resetBut setTitle:NSLocalizedString(@"Done", @"Done") forState:UIControlStateNormal];
+    [self updateTimeStripVisibility];
+}
+
+- (void)closeTimePanel {
+    if (!setMode) {
+	return;
+    }
+    [timePanel prepareToHide];	// a hidden view never gets the release that would end a scrub
+    setMode = false;
+    timePanel.hidden = true;
+    demoBut.hidden = true;
+    [resetBut setTitle:NSLocalizedString(@"Set", @"Set (verb)") forState:UIControlStateNormal];
+    // The eclipse demo (debug builds) borrows the location and time zone; closing the controller gives them back
+    demoCycle = 0;
+    if (demoLng != 0) {
+	[self resetTZ];
+	env->location()->setToUserLocation(demoLat, demoLng, 0/*accuracyInMeters*/);	// must be after setting of timezone
+	demoLat = demoLng = 0;
+    }
+    [self updateTimeStripVisibility];
 }
 
 static int ticks = 0;
@@ -628,6 +726,7 @@ static bool firstAfterComingToForeground = true;
 
 - (void)goingToBackground {
     inBackground = true;
+    [stepper endPress];	// a scrub must not outlive the app's time in the foreground
 }
 
 - (void)goingToForeground {
@@ -642,8 +741,14 @@ static bool firstAfterComingToForeground = true;
     
     [self updateLabelsSeasonsAlarmDSTAndStatusIndicator];	// must do this even when asleep (for alarms)
 
+    [stepper scrubTick];	// a held ◀ or ▶ moves the time one unit per tick, as the old row did
+    [self updateNowButton];
+    [self updateScrubShield];
+    if ([self timeStripVisible]) {
+	[self updateTimeStrip];
+    }
     if (setMode) {
-	[self doJumps];
+	[timePanel refresh];
     }
 
     if (!inBackground) {
@@ -730,63 +835,9 @@ static bool firstAfterComingToForeground = true;
 }
 
 - (void)buttonActionDn:(id)sender {
-    lastButtonPress = 0; // Make sure we take this one
-    if (sender == dayBut) {	    // xxxButs are the red (go backward) ones; xxxBugB are the blue (go forward) ones
-	dayStep = -1;
-	time->stop();
-	[self doJumps];
-    } else if (sender == yearBut) {
-	yearStep = -1;
-	time->stop();
-	[self doJumps];
-    } else if (sender == centBut) {
-	centStep = -1;
-	time->stop();
-	[self doJumps];
-    } else if (sender == monBut) {
-	monthStep = -1;
-	time->stop();
-	[self doJumps];
-    } else if (sender == lunarBut) {
-	lunarStep = -1;
-	time->stop();
-	[self doJumps];
-    } else if (sender == hourBut) {
-	hourStep = -1;
-	time->stop();
-	[self doJumps];
-    } else if (sender == minuteBut) {
-	minuteStep = -1;
-	time->stop();
-	[self doJumps];
-    } else if (sender == dayButB) {
-	dayStep = 1;
-	time->stop();
-	[self doJumps];
-    } else if (sender == centButB) {
-	centStep = 1;
-	time->stop();
-	[self doJumps];
-    } else if (sender == yearButB) {
-	yearStep = 1;
-	time->stop();
-	[self doJumps];
-    } else if (sender == monButB) {
-	monthStep = 1;
-	time->stop();
-	[self doJumps];
-    } else if (sender == lunarButB) {
-	lunarStep = 1;
-	time->stop();
-	[self doJumps];
-    } else if (sender == hourButB) {
-	hourStep = 1;
-	time->stop();
-	[self doJumps];
-    } else if (sender == minuteButB) {
-	minuteStep = 1;
-	time->stop();
-	[self doJumps];
+    if (sender == shieldBut) {
+	[stepper endPress];	// the press that stops a hands-free scrub, and nothing else
+	shieldBut.hidden = YES;
     } else if (sender == snoozeBut) {
 	[ECAudio stopRinging];
     } else if (sender == azBut || sender == altBut) {
@@ -935,93 +986,28 @@ static bool firstAfterComingToForeground = true;
 	time->setToFrozenDateInterval(t);
 	timeChanged = true;
     } else if (sender == resetBut) {
-	time->stop();
 	if (setMode) {
-	    time->resetToLocal();
-	    [self resetTargets];
-	    setMode = false;
-	    demoBut.hidden = true;
-	    centBut.hidden = true;
-	    yearBut.hidden = true;
-	    dayBut.hidden = true;
-	    monBut.hidden = true;
-	    lunarBut.hidden = true;
-	    hourBut.hidden = true;
-	    minuteBut.hidden = true;
-	    centButB.hidden = true;
-	    yearButB.hidden = true;
-	    dayButB.hidden = true;
-	    monButB.hidden = true;
-	    lunarButB.hidden = true;
-	    hourButB.hidden = true;
-	    minuteButB.hidden = true;
-	    //resetBut.titleLabel.font = [UIFont fontWithName:@"Arial" size:18];
-	    resetBut.titleLabel.textColor = [UIColor colorWithRed:.75 green:0 blue:0 alpha:1];
-	    [resetBut setTitle:NSLocalizedString(@"Set", @"Set (verb)") forState:UIControlStateNormal];
-	    demoCycle = 0;
-	    if (demoLng != 0) {
-		[self resetTZ];
-                env->location()->setToUserLocation(demoLat, demoLng, 0/*accuracyInMeters*/);	// must be after setting of timezone
-		demoLat = demoLng = 0;
-	    }
+	    [self closeTimePanel];
 	} else {
-	    setMode = true;
-#ifndef NDEBUG
-	    demoBut.hidden = false;
-#endif
-	    yearBut.hidden = false;
-	    centBut.hidden = false;
-	    dayBut.hidden = false;
-	    monBut.hidden = false;
-	    lunarBut.hidden = false;
-	    hourBut.hidden = false;
-	    minuteBut.hidden = false;
-	    centButB.hidden = false;
-	    yearButB.hidden = false;
-	    dayButB.hidden = false;
-	    monButB.hidden = false;
-	    lunarButB.hidden = false;
-	    hourButB.hidden = false;
-	    minuteButB.hidden = false;
-	    [resetBut setTitle:NSLocalizedString(@"Reset", @"label for the button that reverses the action of 'Set'") forState:UIControlStateNormal];
-            [self doJumps];     // update it NOW, not one second from now
-	    //resetBut.titleLabel.font = [UIFont fontWithName:@"Arial" size:14];
-	    resetBut.titleLabel.textColor = [UIColor whiteColor];
+	    [self openTimePanel];
 	}
-	resetBool = false;
-	centStep = yearStep = dayStep = hourStep = monthStep = lunarStep = minuteStep = 0;
-	[self setStatusBar:NULL];
-        dateLabel.hidden = !setMode;
+    } else if (sender == nowBut) {
+	[stepper now];	// back to the present; the panel, if open, stays open
     } else if (sender == NTPStatusBut) {
         ESTime::resync(true/*userRequested*/);
     } else {
 	ESAssert(false);
     }
-    lastButtonPress = ESSystemTimeBase::currentSystemTime();
 }
 
 - (void)buttonActionUp:(id)sender {
-    if (sender == dayBut || sender == dayButB) {
-	dayStep = 0;
-    } else if (sender == centBut || sender == centButB) {
-	centStep = 0;
-    } else if (sender == yearBut || sender == yearButB) {
-	yearStep = 0;
-    } else if (sender == monBut || sender == monButB) {
-	monthStep = 0;
-    } else if (sender == lunarBut || sender == lunarButB) {
-	lunarStep = 0;
-    } else if (sender == hourBut || sender == hourButB) {
-	hourStep = 0;
-    } else if (sender == minuteBut || sender == minuteButB) {
-	minuteStep = 0;
-    } else if (sender == resetBut) {
+    if (sender == resetBut) {
 //	time->resetToLocal();
 //	[self resetTargets];
 //	resetBool = yearBool = dayBool = hourBool = monthBool = lunarBool = minuteBool = false;
-    } else if (sender == azBut || sender == altBut || sender == snoozeBut) {
+    } else if (sender == azBut || sender == altBut || sender == snoozeBut || sender == shieldBut) {
 	// do nothing
-    } else if (sender == NTPStatusBut || sender == demoBut) {
+    } else if (sender == NTPStatusBut || sender == demoBut || sender == nowBut) {
 	// do nothing
     } else {
 	ESAssert(false);
@@ -1431,8 +1417,6 @@ static NSTimer *sanityTimer = NULL;
 
 //// //// //// clockSetup
 
-static UIColor	*fwdColor;
-static UIColor	*bckColor;
 static double bmw;
 static double bmh;
 static double ChandraR;
@@ -1552,24 +1536,9 @@ static double bdX4;
 static double bdY3;
 static double resetX;
 static double resetY;
-static double advButtonX;
-static double advButtonY;
 static double advButtonWidth;
 static double advButtonHeight;
-static double advMinuteButtonOffsetX;
-static double advHourButtonOffsetX;
-static double advDayButtonOffsetX;
-static double advPhaseButtonOffsetX;
-static double advMonthButtonOffsetX;
-static double advCentButtonOffsetX;
-static double advYearButtonOffsetX;
-static double backMinuteButtonOffsetX;
-static double backHourButtonOffsetX;
-static double backDayButtonOffsetX;
-static double backPhaseButtonOffsetX;
-static double backMonthButtonOffsetX;
-static double backCentButtonOffsetX;
-static double backYearButtonOffsetX;
+static const double nowButtonGap = 8;	// between Set / Done and "Now ▶"
 
 - (void)initializeConstantsForOrientation:(UIInterfaceOrientation)orientation {
     headerLineWidth = 2;
@@ -1588,23 +1557,7 @@ static double backYearButtonOffsetX;
     tzY = -272;
     advButtonWidth = 45;
     advButtonHeight = 40;
-    advMinuteButtonOffsetX = -advButtonWidth;
-    advHourButtonOffsetX = -advButtonWidth*2;
-    advDayButtonOffsetX = -advButtonWidth*3;
-    advPhaseButtonOffsetX = -advButtonWidth*4;
-    advMonthButtonOffsetX = -advButtonWidth*5;
-    advYearButtonOffsetX = -advButtonWidth*6;
-    advCentButtonOffsetX = -advButtonWidth*7;
-    backMinuteButtonOffsetX = advButtonWidth;
-    backHourButtonOffsetX = advButtonWidth*2;
-    backDayButtonOffsetX = advButtonWidth*3;
-    backPhaseButtonOffsetX = advButtonWidth*4;
-    backMonthButtonOffsetX = advButtonWidth*5;
-    backYearButtonOffsetX = advButtonWidth*6;
-    backCentButtonOffsetX = advButtonWidth*7;
     if (UIInterfaceOrientationIsPortrait(orientation)) {
-	advButtonX = 0;
-	advButtonY = 327;
 	fullWidth = 768;
 	fullHeight = 1024;
 	mainX = 0;
@@ -1644,8 +1597,6 @@ static double backYearButtonOffsetX;
 	resetX = BMX;
 	resetY = BMY-headerHeight/2-22;
     } else {	 // layout parameters for landscape:
-	advButtonX = 0;
-	advButtonY = 347;
 	fullWidth = 1024;
 	fullHeight = 768;
 	mainX = 0; // use "-(headerHeight + headerLineWidth*2) / 2" for same position relative to Home button
@@ -1769,8 +1720,6 @@ static double backYearButtonOffsetX;
     planetW = 50;
     planetH = 15;
     
-    fwdColor = [UIColor colorWithRed:.75 green:0 blue:0 alpha:1];
-    bckColor = [UIColor colorWithRed:0 green:.75 blue:1 alpha:1];
     
 }
 
@@ -1969,8 +1918,6 @@ static bool localeIsCyrillic() {
     moonView = [[EOMoonView alloc] initWithName:@"moon300.png" x:ChandraX y:ChandraY radiusAtPerigee:ChandraR update:moonViewUpdate];
     [self addSubview:moonView];
     [self resizeSubView:moonView masterScale:moonMasterScale];
-    lunarBut  = [self createButtonAtX:advButtonX + advPhaseButtonOffsetX Y:advButtonY width:advButtonWidth height:advButtonHeight highlight:true text:NSLocalizedString(@"phase", @"short abbreviation for phase of the Moon") color:fwdColor];
-    lunarButB = [self createButtonAtX:advButtonX + backPhaseButtonOffsetX Y:advButtonY width:advButtonWidth height:advButtonHeight highlight:true text:NSLocalizedString(@"phase", @"short abbreviation for phase of the Moon") color:bckColor];
     
     // Earth images with terminator widget
     earthView = [[EOEarthView alloc] initWithX:EVX y:EVY width:bmw height:bmh update:blueMarbleUpdate];
@@ -1981,8 +1928,6 @@ static bool localeIsCyrillic() {
     UITapGestureRecognizer *earthTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(earthViewTapped:)];
     [earthView addGestureRecognizer:earthTap];
     [earthTap release];
-    hourBut  = [self createButtonAtX:advButtonX + advHourButtonOffsetX Y:advButtonY width:advButtonWidth height:advButtonHeight highlight:true text:NSLocalizedString(@"hour", @"short abbreviation for hour") color:fwdColor];
-    hourButB  = [self createButtonAtX:advButtonX + backHourButtonOffsetX Y:advButtonY width:advButtonWidth height:advButtonHeight highlight:true text:NSLocalizedString(@"hour", @"short abbreviation for hour") color:bckColor];
     
     /////////// digital date
     //printf("Available locale ids:\n");
@@ -2011,11 +1956,6 @@ static bool localeIsCyrillic() {
 #endif
     eclipseStatusLabel.adjustsFontSizeToFitWidth = YES;
 
-    // buttons
-    monBut  = [self createButtonAtX:advButtonX + advMonthButtonOffsetX Y:advButtonY width:advButtonWidth height:advButtonHeight highlight:true text:NSLocalizedString(@"mon", "short abbreviation for month") color:fwdColor];
-    monButB  = [self createButtonAtX:advButtonX + backMonthButtonOffsetX Y:advButtonY width:advButtonWidth height:advButtonHeight highlight:true text:NSLocalizedString(@"mon", "short abbreviation for month") color:bckColor];
-    dayBut  = [self createButtonAtX:advButtonX + advDayButtonOffsetX Y:advButtonY width:advButtonWidth height:advButtonHeight highlight:true text:NSLocalizedString(@"day", "short abbreviation for day") color:fwdColor];
-    dayButB  = [self createButtonAtX:advButtonX + backDayButtonOffsetX Y:advButtonY width:advButtonWidth height:advButtonHeight highlight:true text:NSLocalizedString(@"day", "short abbreviation for day") color:bckColor];
     
     ////////// NTP Status "light"
     NTPStatusLabel = [self createLabelAtX:NTPStatusX Y:NTPStatusY width:NTPStatusSize height:NTPStatusSize fontSize:NTPStatusSize];
@@ -2064,6 +2004,11 @@ static bool localeIsCyrillic() {
 #endif
     resetBut.titleLabel.adjustsFontSizeToFitWidth = YES;
     //resetBut.titleLabel.font = [UIFont fontWithName:@"Arial" size:18];
+
+    // "Now ▶", shown to its right while the time is not the present (updateNowButton), the two then centred as a pair
+    nowBut = [self createButtonAtX:resetX+(advButtonWidth+24+nowButtonGap)/2 Y:resetY width:advButtonWidth+24 height:advButtonHeight highlight:true
+			     text:[NSString stringWithFormat:@"%@ ▶", NSLocalizedString(@"Now", @"button: return the clock to the present")] color:[UIColor whiteColor]];
+    nowBut.titleLabel.adjustsFontSizeToFitWidth = YES;
 
 #ifdef INNER_SUBDIALS
     // inner subdial hands
@@ -2249,24 +2194,30 @@ static bool localeIsCyrillic() {
     [self addSubview:eclipseRingDesNodeHand];
 #endif
 
-    yearBut  = [self createButtonAtX:advButtonX + advYearButtonOffsetX Y:advButtonY width:advButtonWidth height:advButtonHeight highlight:true text:NSLocalizedString(@"year", "short abbreviation for year") color:fwdColor];
-    yearButB = [self createButtonAtX:advButtonX + backYearButtonOffsetX Y:advButtonY width:advButtonWidth height:advButtonHeight highlight:true text:NSLocalizedString(@"year", "short abbreviation for year") color:bckColor];
-    centBut  = [self createButtonAtX:advButtonX + advCentButtonOffsetX Y:advButtonY width:advButtonWidth height:advButtonHeight highlight:true text:NSLocalizedString(@"cent", "short abbreviation for century") color:fwdColor];
-    centButB = [self createButtonAtX:advButtonX + backCentButtonOffsetX Y:advButtonY width:advButtonWidth height:advButtonHeight highlight:true text:NSLocalizedString(@"cent", "short abbreviation for century") color:bckColor];
     
     eotHand = [[[EOHandTriangleView alloc] initWithKind:EOEOTMinutes length:EOTR*.90 width:3   x:EOTX y:EOTY update:extHandUpdate strokeColor:[UIColor lightGrayColor] fillColor:NULL] autorelease];
     [self addSubview:eotHand];
-    minuteBut  = [self createButtonAtX:advButtonX + advMinuteButtonOffsetX Y:advButtonY width:advButtonWidth height:advButtonHeight highlight:true text:NSLocalizedString(@"min", "short abbreviation for minute") color:fwdColor];
-    minuteButB = [self createButtonAtX:advButtonX + backMinuteButtonOffsetX Y:advButtonY width:advButtonWidth height:advButtonHeight highlight:true text:NSLocalizedString(@"min", "short abbreviation for minute") color:bckColor];
     
     snoozeBut = [self createButtonAtX:0 Y:0 width:1024 height:1024 highlight:true text:NULL color:NULL];
     snoozeBut.hidden = true;
+    // The time controller's shield (updateScrubShield), the same idiom; sized past the canvas so that the
+    // portrait placement quirk of reorientSubView: leaves no strip uncovered
+    shieldBut = [self createButtonAtX:0 Y:0 width:1200 height:1200 highlight:false text:NULL color:NULL];
+    shieldBut.hidden = true;
     
     //lastOrientation = saveOrientation;
 //[self initializeConstantsForOrientation:lastOrientation];
 //[self moveClockWidgetsForOrientation:lastOrientation];
 
     [self setupTimerAndDateLabel];
+
+    // The time controller, in place of the old row of stepper buttons: its model, then its panel above
+    // every other widget (the strip it writes is the date label the timer setup just created)
+    stepper = [[EOTimeStepper alloc] initWithWatchTime:time env:env client:self ticksPerSecond:EOClockUpdate];
+    timePanel = [[EOTimeControllerView alloc] initWithStepper:stepper clock:self];
+    [view addSubview:timePanel];
+    [self placeTimePanel];
+
     [self updateLabelsSeasonsAlarmDSTAndStatusIndicator];
     
     tracePrintf1("%lu views", (unsigned long)[subviews count]);
@@ -2307,20 +2258,6 @@ static bool localeIsCyrillic() {
 	[self reorientSubView:eclipseStatusLabel toOrientation:newOrientation offsetBy:CGPointMake(eclipseStatusX, eclipseStatusY)];
 	[self reorientSubView:eclipseHorizonLabel toOrientation:newOrientation offsetBy:CGPointMake(eclipseHorizonX, eclipseHorizonY)];
 	
-	[self reorientSubView:minuteBut toOrientation:newOrientation offsetBy:CGPointMake(advButtonX + advMinuteButtonOffsetX, advButtonY)];
-	[self reorientSubView:hourBut toOrientation:newOrientation offsetBy:CGPointMake(advButtonX + advHourButtonOffsetX, advButtonY)];
-	[self reorientSubView:lunarBut toOrientation:newOrientation offsetBy:CGPointMake(advButtonX + advPhaseButtonOffsetX, advButtonY)];
-	[self reorientSubView:dayBut toOrientation:newOrientation offsetBy:CGPointMake(advButtonX + advDayButtonOffsetX, advButtonY)];
-	[self reorientSubView:monBut toOrientation:newOrientation offsetBy:CGPointMake(advButtonX + advMonthButtonOffsetX, advButtonY)];
-	[self reorientSubView:yearBut toOrientation:newOrientation offsetBy:CGPointMake(advButtonX + advYearButtonOffsetX, advButtonY)];
-	[self reorientSubView:centBut toOrientation:newOrientation offsetBy:CGPointMake(advButtonX + advCentButtonOffsetX, advButtonY)];
-	[self reorientSubView:minuteButB toOrientation:newOrientation offsetBy:CGPointMake(advButtonX + backMinuteButtonOffsetX, advButtonY)];
-	[self reorientSubView:hourButB toOrientation:newOrientation offsetBy:CGPointMake(advButtonX + backHourButtonOffsetX, advButtonY)];
-	[self reorientSubView:lunarButB toOrientation:newOrientation offsetBy:CGPointMake(advButtonX + backPhaseButtonOffsetX, advButtonY)];
-	[self reorientSubView:dayButB toOrientation:newOrientation offsetBy:CGPointMake(advButtonX + backDayButtonOffsetX, advButtonY)];
-	[self reorientSubView:monButB toOrientation:newOrientation offsetBy:CGPointMake(advButtonX + backMonthButtonOffsetX, advButtonY)];
-	[self reorientSubView:yearButB toOrientation:newOrientation offsetBy:CGPointMake(advButtonX + backYearButtonOffsetX, advButtonY)];
-	[self reorientSubView:centButB toOrientation:newOrientation offsetBy:CGPointMake(advButtonX + backCentButtonOffsetX, advButtonY)];
 	[self reorientSubView:demoBut toOrientation:newOrientation offsetBy:CGPointMake(eclipseX, eclipseY-demoButtonOffsetY)];
 	
 	[self reorientSubView:utcHourHand toOrientation:newOrientation offsetBy:CGPointMake(UTCX, UTCY)];
@@ -2349,6 +2286,7 @@ static bool localeIsCyrillic() {
 	[self reorientSubView:azBut toOrientation:newOrientation offsetBy:CGPointMake(azX, azY)];
 	[self reorientSubView:altBut toOrientation:newOrientation offsetBy:CGPointMake(altX, altY)];
 	[self reorientSubView:snoozeBut toOrientation:newOrientation offsetBy:CGPointMake(mainX, mainY)];
+	[self reorientSubView:shieldBut toOrientation:newOrientation offsetBy:CGPointMake(mainX, mainY)];
 	[self reorientSubView:azLabel toOrientation:newOrientation offsetBy:CGPointMake(azX, azY+altR/2-planetH/2)];
 	[self reorientSubView:altLabel toOrientation:newOrientation offsetBy:CGPointMake(altX, altY+altR/2-planetH/2)];
 	
@@ -2386,7 +2324,8 @@ static bool localeIsCyrillic() {
 	[self reorientSubView:venusHand toOrientation:newOrientation offsetBy:CGPointMake(mainX, mainY)];
 	[self reorientSubView:mercuryHand toOrientation:newOrientation offsetBy:CGPointMake(mainX, mainY)];
 
-	[self reorientSubView:resetBut toOrientation:newOrientation offsetBy:CGPointMake(resetX, resetY)];
+	[self placeSetAndNowButtonsForOrientation:newOrientation];
+	[self placeTimePanel];
 
 #ifdef SEASONS
 	[self reorientSubView:springIcon toOrientation:newOrientation offsetBy:CGPointMake(yearX-seasonIconOffset, yearY+seasonIconOffset)];
@@ -2515,6 +2454,7 @@ static bool localeIsCyrillic() {
 
 - (void)prepareToReorient:(UIInterfaceOrientation)newOrientation {
     aboutToReorient = true;
+    [stepper endPress];	// the rotation cancels the pair's touch; end any scrub with it
     if (firstAfterComingToForeground && (newOrientation != lastOrientation)) {
 	for (EOScheduledView *v in subviews) {
 	    [v zeroAngle];
@@ -2535,7 +2475,7 @@ static bool localeIsCyrillic() {
         finishingHelp = false;
     } else {
 	[self setStatusBar:NULL];
-        dateLabel.hidden = !setMode;
+        dateLabel.hidden = ![self timeStripVisible];
     }
 }
 
@@ -2599,15 +2539,13 @@ static bool localeIsCyrillic() {
     [azBut release];
     [altBut release];
     [snoozeBut release];
-    [dayBut release];
-    [monBut release];
-    [centBut release];
-    [yearBut release];
+    [shieldBut release];
     [demoBut release];
-    [lunarBut release];
-    [minuteBut release];
-    [hourBut release];
     [resetBut release];
+    [nowBut release];
+    [timePanel removeFromSuperview];
+    [timePanel release];
+    [stepper release];
 
     env->location()->removeObserver(locationObserver);
     delete locationObserver;
@@ -2618,13 +2556,6 @@ static bool localeIsCyrillic() {
     delete time;
     delete env;
 
-    [dayButB release];
-    [monButB release];
-    [yearButB release];
-    [centButB release];
-    [lunarButB release];
-    [minuteButB release];
-    [hourButB release];
     if (alarmTime) {
         delete alarmTime;
     }
