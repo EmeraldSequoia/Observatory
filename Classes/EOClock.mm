@@ -105,6 +105,7 @@ ESLocationAsString(ESLocation *location) {
 - (void)updateTimeStripVisibility;
 - (void)placeTimePanel;
 - (void)openTimePanel;
+- (void)placeSetAndNowButtonsForOrientation:(UIInterfaceOrientation)orientation;
 
 @end
 
@@ -470,7 +471,6 @@ BOOL timeChanged = false;
 			  status];
 	dateLabel.textColor = [UIColor whiteColor];
     }
-    nowBut.hidden = dateLabel.hidden || time->isCorrect();
 }
 
 // Show or hide the strip (and the status bar with it) as the controller opens and closes and as the time
@@ -480,17 +480,28 @@ BOOL timeChanged = false;
 	return;
     }
     bool visible = [self timeStripVisible];
-    bool changed = (dateLabel.hidden == visible);
-    [self setTimeStripHidden:!visible];	// always: the Now button follows the time as well as the strip
-    if (changed) {
-	[self setStatusBar:NULL];
+    if (dateLabel.hidden == !visible) {
+	return;
+    }
+    dateLabel.hidden = !visible;
+    [self setStatusBar:NULL];
+}
+
+// "Now ▶" beside Set / Done: shown while the time is not the present, whatever moved it there (the
+// controller, or the eclipse demo); checked from tick
+- (void)updateNowButton {
+    bool hidden = time->isCorrect();
+    if (nowBut.hidden != hidden) {
+	nowBut.hidden = hidden;
+	[self placeSetAndNowButtonsForOrientation:lastOrientation];	// Set slides over to make the pair, and back
     }
 }
 
-// The strip is two widgets: the label, and its Now button, shown only while the time is not the present
-- (void)setTimeStripHidden:(bool)hidden {
-    dateLabel.hidden = hidden;
-    nowBut.hidden = hidden || time->isCorrect();
+// Set / Done sits at resetX on its own; while "Now ▶" shows, the two are centred there as a pair
+- (void)placeSetAndNowButtonsForOrientation:(UIInterfaceOrientation)orientation {
+    double halfPair = (advButtonWidth + 24 + nowButtonGap) / 2;
+    [self reorientSubView:resetBut toOrientation:orientation offsetBy:CGPointMake(nowBut.hidden ? resetX : resetX - halfPair, resetY)];
+    [self reorientSubView:nowBut toOrientation:orientation offsetBy:CGPointMake(resetX + halfPair, resetY)];
 }
 
 //// what the time stepper tells us
@@ -703,6 +714,7 @@ static bool firstAfterComingToForeground = true;
     [self updateLabelsSeasonsAlarmDSTAndStatusIndicator];	// must do this even when asleep (for alarms)
 
     [stepper scrubTick];	// a held ◀ or ▶ moves the time one unit per tick, as the old row did
+    [self updateNowButton];
     if ([self timeStripVisible]) {
 	[self updateTimeStrip];
     }
@@ -1494,10 +1506,7 @@ static double resetX;
 static double resetY;
 static double advButtonWidth;
 static double advButtonHeight;
-// The strip's Now button, at the strip's right end
-static const double nowButtonWidth = 72;
-static const double nowButtonHeight = 24;
-static const double nowButtonMargin = 10;
+static const double nowButtonGap = 8;	// between Set / Done and "Now ▶"
 
 - (void)initializeConstantsForOrientation:(UIInterfaceOrientation)orientation {
     headerLineWidth = 2;
@@ -1964,13 +1973,10 @@ static bool localeIsCyrillic() {
     resetBut.titleLabel.adjustsFontSizeToFitWidth = YES;
     //resetBut.titleLabel.font = [UIFont fontWithName:@"Arial" size:18];
 
-    // The strip's Now button, at its right end: back to the present (shown only while the time is not it; see updateTimeStrip)
-    nowBut = [self createButtonAtX:fullWidth/2-nowButtonMargin-nowButtonWidth/2 Y:fullHeight/2-20 width:nowButtonWidth height:nowButtonHeight highlight:true
+    // "Now ▶", shown to its right while the time is not the present (updateNowButton), the two then centred as a pair
+    nowBut = [self createButtonAtX:resetX+(advButtonWidth+24+nowButtonGap)/2 Y:resetY width:advButtonWidth+24 height:advButtonHeight highlight:true
 			     text:[NSString stringWithFormat:@"%@ ▶", NSLocalizedString(@"Now", @"button: return the clock to the present")] color:[UIColor whiteColor]];
-    nowBut.titleLabel.font = [UIFont boldSystemFontOfSize:14];	// the strip's font
-    nowBut.layer.cornerRadius = 6;
-    nowBut.layer.borderWidth = 1;
-    nowBut.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.6].CGColor;
+    nowBut.titleLabel.adjustsFontSizeToFitWidth = YES;
 
 #ifdef INNER_SUBDIALS
     // inner subdial hands
@@ -2281,7 +2287,7 @@ static bool localeIsCyrillic() {
 	[self reorientSubView:venusHand toOrientation:newOrientation offsetBy:CGPointMake(mainX, mainY)];
 	[self reorientSubView:mercuryHand toOrientation:newOrientation offsetBy:CGPointMake(mainX, mainY)];
 
-	[self reorientSubView:resetBut toOrientation:newOrientation offsetBy:CGPointMake(resetX, resetY)];
+	[self placeSetAndNowButtonsForOrientation:newOrientation];
 	[self placeTimePanel];
 
 #ifdef SEASONS
@@ -2370,7 +2376,6 @@ static bool localeIsCyrillic() {
 	lastOrientation = newOrientation;
 	
 	[self reorientSubView:dateLabel toOrientation:newOrientation offsetBy:CGPointMake(0, fullHeight/2-20)];
-	[self reorientSubView:nowBut toOrientation:newOrientation offsetBy:CGPointMake(fullWidth/2-nowButtonMargin-nowButtonWidth/2, fullHeight/2-20)];
     }
 }
 
@@ -2422,7 +2427,7 @@ static bool localeIsCyrillic() {
     // Not [UIApplication setStatusBarHidden:], which is a no-op as of iOS 27; the view controller owns this now
     OrreryAppDelegate *appDelegate = (OrreryAppDelegate *)[[UIApplication sharedApplication] delegate];
     appDelegate.mainViewController.statusBarHidden = false;
-    [self setTimeStripHidden:true];
+    dateLabel.hidden = true;
 }
 
 - (void)resetAfterOrientationChangeToOrientation:(UIInterfaceOrientation)newOrientation newSize:(CGSize)newSize {
@@ -2433,7 +2438,7 @@ static bool localeIsCyrillic() {
         finishingHelp = false;
     } else {
 	[self setStatusBar:NULL];
-        [self setTimeStripHidden:![self timeStripVisible]];
+        dateLabel.hidden = ![self timeStripVisible];
     }
 }
 

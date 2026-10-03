@@ -130,7 +130,7 @@ class ClockTimeSyncObserver;
 
     UIButton		*demoBut;
     UIButton		*resetBut;	// opens and closes the time controller ("Set" / "Done")
-    UIButton		*nowBut;	// the strip's return-to-present button, shown while the time is not the present
+    UIButton		*nowBut;	// "Now ▶" beside Set / Done: back to the present, shown while the time is not it
     EOTimeStepper	*stepper;	// the time controller's model
     EOTimeControllerView *timePanel;	// and its panel
     UIButton		*azBut;
@@ -188,7 +188,6 @@ class ClockTimeSyncObserver;
 + (void)setupLocalNotificationForAlarmStateEnabled:(bool)enabled;
 - (void)notifyTimeAdjustment;
 - (bool)timeStripVisible;	// the strip along the top: the controller is open or the time is not the present
-- (void)setTimeStripHidden:(bool)hidden;	// the strip's label and its Now button together
 - (void)closeTimePanel;
 - (void)timeDidChange;		// from the time stepper: the display must redraw
 - (void)transportDidChange;	// from the time stepper: the views re-arm their schedules
