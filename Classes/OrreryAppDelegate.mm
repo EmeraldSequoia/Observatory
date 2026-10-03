@@ -41,12 +41,14 @@ static bool currentDAL;
     NSNumber *defaultDAL = [NSNumber numberWithBool:NO];
     NSNumber *defaultSSP = [NSNumber numberWithBool:NO];
     NSNumber *defaultPlanet = [NSNumber numberWithInt:ECPlanetSun];
+    NSString *defaultTimeStepUnit = @"day";
     NSMutableDictionary *defaultsDict = [NSMutableDictionary dictionaryWithObjectsAndKeys:
 					 defaultUNTP,	    @"EOUseNTP",
 					 defaultULS,	    @"EOUseLocationServices",
 					 defaultDAL,	    @"EODisableAutoLock",
  					 defaultSSP,	    @"EOShowSubsolarPoint",
 					 defaultPlanet,	    @"EOPlanet",
+					 defaultTimeStepUnit, @"EOTimeStepUnit",
 					 nil ];
     [[NSUserDefaults standardUserDefaults] registerDefaults:defaultsDict];
 }

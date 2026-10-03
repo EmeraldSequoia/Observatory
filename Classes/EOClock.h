@@ -9,6 +9,7 @@
 #import <Foundation/Foundation.h>
 #import "EOHandAlarmView.h"
 #include "ESCalendar.hpp"
+#import "EOTimeStepper.h"
 
 
 #define EOSCREENWIDTH      768
@@ -23,8 +24,9 @@ class ClockTimeSyncObserver;
 @class EOBaseView, EOHandView, EORingView, EOMoonView, EOEarthView, EOHandTriangleView, EOHandBreguetView, EOHandImageView, EOHandNeedleView;
 @class EORingsAndPlanetsShuffleView, EOLogoShuffleView, EOAltitudeDialShuffleView, EOAzimuthDialShuffleView, EOEclipseDialShuffleView, EOEOTDialShuffleView, EOEarthBackShuffleView, EOSimpleImageShuffleView;
 @class EOEclipseRingImageView, EOEclipseView, EOMoonAgeView;
+@class EOTimeControllerView;
 
-@interface EOClock : NSObject<UIActionSheetDelegate, UIAlertViewDelegate> {
+@interface EOClock : NSObject<UIActionSheetDelegate, UIAlertViewDelegate, EOTimeStepperClient> {
     ESWatchTime		*time;
     ESTimeLocAstroEnvironment *env;
     EOBaseView		*view;
@@ -127,23 +129,9 @@ class ClockTimeSyncObserver;
 #endif
 
     UIButton		*demoBut;
-    UIButton		*yearBut;
-    UIButton		*centBut;
-    UIButton		*dayBut;
-    UIButton		*wdayBut;
-    UIButton		*monBut;
-    UIButton		*lunarBut;
-    UIButton		*hourBut;
-    UIButton		*minuteBut;
-    UIButton		*yearButB;
-    UIButton		*centButB;
-    UIButton		*dayButB;
-    UIButton		*wdayButB;
-    UIButton		*monButB;
-    UIButton		*lunarButB;
-    UIButton		*hourButB;
-    UIButton		*minuteButB;
-    UIButton		*resetBut;
+    UIButton		*resetBut;	// opens and closes the time controller ("Set" / "Done")
+    EOTimeStepper	*stepper;	// the time controller's model
+    EOTimeControllerView *timePanel;	// and its panel
     UIButton		*azBut;
     UIButton		*altBut;
     UIButton		*snoozeBut;
@@ -152,17 +140,8 @@ class ClockTimeSyncObserver;
     ClockTimeSyncObserver *timeSyncObserver;
     ClockLocationObserver *locationObserver;
 
-    bool		setMode;
+    bool		setMode;	// the time controller is open
     bool		finishingHelp;
-    int			centStep;
-    int			yearStep;
-    int			monthStep;
-    int			lunarStep;
-    int			wkdStep;
-    int			dayStep;
-    int			hourStep;
-    int			minuteStep;
-    bool		resetBool;
     int			planet;
     UIInterfaceOrientation  lastOrientation;
     bool		noonOnTop;
@@ -207,6 +186,10 @@ class ClockTimeSyncObserver;
 + (ESWatchTime *)alarmTime;
 + (void)setupLocalNotificationForAlarmStateEnabled:(bool)enabled;
 - (void)notifyTimeAdjustment;
+- (bool)timeStripVisible;	// the strip along the top: the controller is open or the time is not the present
+- (void)closeTimePanel;
+- (void)timeDidChange;		// from the time stepper: the display must redraw
+- (void)transportDidChange;	// from the time stepper: the views re-arm their schedules
 - (void)goingToBackground;
 - (void)goingToForeground;
 - (void)adjustAlarmTime;
