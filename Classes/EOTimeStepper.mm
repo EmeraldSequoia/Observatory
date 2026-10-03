@@ -8,12 +8,12 @@
 #import "EOTimeStepper.h"
 #import "ESWatchTime.hpp"
 #import "ESTimeLocAstroEnvironment.hpp"
-#import "ESSystemTimeBase.hpp"
 #import "ESErrorReporter.hpp"
 
-// A press becomes a scrub after this long, and a scrub then moves this often (ten units a second)
+// A press becomes a scrub after this long.  The scrub then moves one unit per clock tick, as the
+// old row of buttons did: the display shows each position as a jump, with no motion in between,
+// so a slower cadence only looks choppier (the web app's ten a second rides on its animation).
 static const NSTimeInterval EOHoldDelay = 0.3;
-static const ESTimeInterval EOScrubStepInterval = 0.1;
 
 static NSString * const EOTimeStepUnitDefaultsKey = @"EOTimeStepUnit";
 
@@ -35,15 +35,15 @@ static const char *unitKeys[EOTimeStepNumUnits] = { "cent", "yr", "mo", "day", "
     return EOTimeStepDay;
 }
 
-- (id)initWithWatchTime:(ESWatchTime *)aTime env:(ESTimeLocAstroEnvironment *)anEnv client:(id<EOTimeStepperClient>)aClient {
+- (id)initWithWatchTime:(ESWatchTime *)aTime env:(ESTimeLocAstroEnvironment *)anEnv client:(id<EOTimeStepperClient>)aClient ticksPerSecond:(int)aTicksPerSecond {
     if ((self = [super init])) {
         time = aTime;
         env = anEnv;
         client = aClient;
+        ticksPerSecond = aTicksPerSecond;
         unit = [EOTimeStepper unitForKey:[[NSUserDefaults standardUserDefaults] stringForKey:EOTimeStepUnitDefaultsKey]];
         scrubState = EOTimeScrubIdle;
         scrubDirection = 1;
-        lastScrubStepTime = 0;
         holdTimer = nil;
     }
     return self;
@@ -84,8 +84,8 @@ static const char *unitKeys[EOTimeStepNumUnits] = { "cent", "yr", "mo", "day", "
 
 - (NSString *)statusString {
     if (scrubState == EOTimeScrubHeld) {
-        NSString *rate = [NSString stringWithFormat:NSLocalizedString(@"10 %@/s", @"scrub rate, e.g. '10 day/s' (%@ is the unit abbreviation)"),
-                                   [EOTimeStepper labelForUnit:unit]];
+        NSString *rate = [NSString stringWithFormat:NSLocalizedString(@"%d %@/s", @"scrub rate, e.g. '20 day/s' (%d is the rate, %@ the unit abbreviation)"),
+                                   ticksPerSecond, [EOTimeStepper labelForUnit:unit]];
         return [NSString stringWithFormat:@"%@ %@", rate, scrubDirection > 0 ? @"▶" : @"◀"];
     }
     if (time->isStopped()) {
@@ -165,7 +165,6 @@ static const char *unitKeys[EOTimeStepNumUnits] = { "cent", "yr", "mo", "day", "
         return;
     }
     scrubState = EOTimeScrubHeld;
-    lastScrubStepTime = ESSystemTimeBase::currentSystemTime();
 }
 
 - (void)endPress {
@@ -187,12 +186,7 @@ static const char *unitKeys[EOTimeStepNumUnits] = { "cent", "yr", "mo", "day", "
 }
 
 - (void)scrubTick {
-    if (scrubState != EOTimeScrubHeld) {
-        return;
-    }
-    ESTimeInterval now = ESSystemTimeBase::currentSystemTime();
-    if (now - lastScrubStepTime >= EOScrubStepInterval) {
-        lastScrubStepTime = now;
+    if (scrubState == EOTimeScrubHeld) {
         [self stepInDirection:scrubDirection];
     }
 }

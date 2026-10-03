@@ -691,7 +691,7 @@ static bool firstAfterComingToForeground = true;
     
     [self updateLabelsSeasonsAlarmDSTAndStatusIndicator];	// must do this even when asleep (for alarms)
 
-    [stepper scrubTick];	// a held ◀ or ▶ moves the time ten units a second
+    [stepper scrubTick];	// a held ◀ or ▶ moves the time one unit per tick, as the old row did
     if ([self timeStripVisible]) {
 	[self updateTimeStrip];
     }
@@ -2146,7 +2146,7 @@ static bool localeIsCyrillic() {
 
     // The time controller, in place of the old row of stepper buttons: its model, then its panel above
     // every other widget (the strip it writes is the date label the timer setup just created)
-    stepper = [[EOTimeStepper alloc] initWithWatchTime:time env:env client:self];
+    stepper = [[EOTimeStepper alloc] initWithWatchTime:time env:env client:self ticksPerSecond:EOClockUpdate];
     timePanel = [[EOTimeControllerView alloc] initWithStepper:stepper clock:self];
     [view addSubview:timePanel];
     [self placeTimePanel];

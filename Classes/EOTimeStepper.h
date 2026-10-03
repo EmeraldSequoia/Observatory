@@ -44,10 +44,10 @@ typedef enum EOTimeScrubState {
     ESWatchTime               *time;              // the client's; not owned
     ESTimeLocAstroEnvironment *env;               // the client's; not owned
     id<EOTimeStepperClient>   client;             // owns us; not retained
+    int                       ticksPerSecond;     // the client's clock rate: a scrub moves one unit per tick
     EOTimeStepUnit            unit;
     EOTimeScrubState          scrubState;
     int                       scrubDirection;     // +1 forward, -1 backward
-    ESTimeInterval            lastScrubStepTime;  // system time of the last scrub step
     NSTimer                   *holdTimer;
 }
 
@@ -55,9 +55,9 @@ typedef enum EOTimeScrubState {
 @property (readonly) EOTimeScrubState scrubState;
 @property (readonly) int scrubDirection;
 
-- (id)initWithWatchTime:(ESWatchTime *)aTime env:(ESTimeLocAstroEnvironment *)anEnv client:(id<EOTimeStepperClient>)aClient;
+- (id)initWithWatchTime:(ESWatchTime *)aTime env:(ESTimeLocAstroEnvironment *)anEnv client:(id<EOTimeStepperClient>)aClient ticksPerSecond:(int)aTicksPerSecond;
 
-// Labels, localized: a chip's, the pair's ("1 day"), and the status line's ("Stopped", "10 day/s ▶")
+// Labels, localized: a chip's, the pair's ("1 day"), and the status line's ("Stopped", "20 day/s ▶")
 + (NSString *)labelForUnit:(EOTimeStepUnit)aUnit;
 - (NSString *)stepLabel;
 - (NSString *)statusString;
@@ -73,7 +73,7 @@ typedef enum EOTimeScrubState {
 - (void)endPress;
 - (bool)isScrubbing;    // the hold has engaged
 
-// From the clock's tick: one unit every 100 ms while a scrub runs
+// From the clock's tick: one unit per tick while a scrub runs
 - (void)scrubTick;
 
 // Back to the present, running
