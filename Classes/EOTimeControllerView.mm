@@ -47,6 +47,10 @@ static void styleAsHolding(UIButton *button) {
     styleButton(button, rgb(0x55, 0x55, 0x66), rgb(0x88, 0xaa, 0xff), rgb(0xcc, 0xcc, 0xff));
 }
 
+static void styleAsActive(UIButton *button) {     // the web's .tp-btn.active: ‖ while the clock runs
+    styleButton(button, rgb(0x44, 0x44, 0x55), rgb(0x88, 0xaa, 0xff), rgb(0x88, 0xaa, 0xff));
+}
+
 static void styleAsFailed(UIButton *button) {
     styleButton(button, rgb(0x44, 0x33, 0x22), rgb(0x77, 0x55, 0x44), rgb(0xaa, 0x88, 0x66));
 }
@@ -117,6 +121,14 @@ static void setLabelText(UILabel *label, NSString *text) {
                                         font:[UIFont fontWithName:@"Arial" size:15]];
         styleAsPlain(nowButton);
         [nowButton addTarget:self action:@selector(nowPressed:) forControlEvents:UIControlEventTouchDown];
+        // ‖ while the clock runs, ▶ while it is stopped; like Now, they act on the press
+        UIFont *transportFont = [UIFont systemFontOfSize:16];
+        pauseButton = [self addButtonWithTitle:@"‖" font:transportFont];
+        styleAsActive(pauseButton);
+        [pauseButton addTarget:self action:@selector(pausePressed:) forControlEvents:UIControlEventTouchDown];
+        playButton = [self addButtonWithTitle:@"▶" font:transportFont];
+        styleAsPlain(playButton);
+        [playButton addTarget:self action:@selector(playPressed:) forControlEvents:UIControlEventTouchDown];
         closeButton = [self addButtonWithTitle:@"×" font:[UIFont systemFontOfSize:24]];
         styleButton(closeButton, [UIColor clearColor], [UIColor clearColor], rgb(0x66, 0x66, 0x77));
         [closeButton addTarget:self action:@selector(closeTapped:) forControlEvents:UIControlEventTouchUpInside];
@@ -185,8 +197,8 @@ static void setLabelText(UILabel *label, NSString *text) {
     double inner = panelWidth - 2 * padSide;
     double y = padTop;
 
-    // The top row: Now, and the close ×
-    nowButton.frame = CGRectMake(padSide, y, inner - rowHeight - gap, rowHeight);
+    // The top row: the transport, and the close ×
+    [self layoutTransportRow];
     closeButton.frame = CGRectMake(padSide + inner - rowHeight, y, rowHeight, rowHeight);
     y += rowHeight + 6;
 
@@ -227,6 +239,32 @@ static void setLabelText(UILabel *label, NSString *text) {
     CGRect frame = self.frame;
     frame.size.height = y + padBottom;
     self.frame = frame;
+}
+
+// The transport, left of the ×: Now ▶ while the time is not the present, then ‖ while the clock runs
+// or ▶ while it is stopped.  The buttons present share the row, as the web's do; laid out again
+// only when that set changes (refresh), so a pressed button keeps its frame under the finger.
+- (void)layoutTransportRow {
+    shownAtPresent = [stepper isAtPresent];
+    shownRunning = [stepper isRunning];
+    nowButton.hidden = shownAtPresent;
+    pauseButton.hidden = !shownRunning;
+    playButton.hidden = shownRunning;
+    NSMutableArray *row = [NSMutableArray arrayWithCapacity:3];
+    for (UIButton *button in [NSArray arrayWithObjects:nowButton, pauseButton, playButton, nil]) {
+        if (button.hidden) {
+            button.highlighted = NO;    // a press can hide the button it landed on, mid-touch
+        } else {
+            [row addObject:button];
+        }
+    }
+    double inner = panelWidth - 2 * padSide;
+    double width = (inner - rowHeight - gap - ([row count] - 1) * gap) / [row count];
+    double x = padSide;
+    for (UIButton *button in row) {
+        button.frame = CGRectMake(x, padTop, width, rowHeight);
+        x += width + gap;
+    }
 }
 
 - (void)setBodyRowShown:(bool)shown {
@@ -284,6 +322,16 @@ static void setLabelText(UILabel *label, NSString *text) {
     [self refresh];
 }
 
+- (void)pausePressed:(UIButton *)sender {
+    [stepper stop];
+    [self refresh];
+}
+
+- (void)playPressed:(UIButton *)sender {
+    [stepper play];
+    [self refresh];
+}
+
 - (void)closeTapped:(UIButton *)sender {
     [clock closeTimePanel];
 }
@@ -328,6 +376,9 @@ static void setLabelText(UILabel *label, NSString *text) {
     [self setBodyRowShown:[EOTimeStepper unitUsesBody:unit]];
 
     setLabelText(statusLabel, [stepper statusString]);
+    if ([stepper isAtPresent] != shownAtPresent || [stepper isRunning] != shownRunning) {
+        [self layoutTransportRow];
+    }
     NSString *bodyName = [Utilities nameOfPlanetWithNumber:(ECPlanetNumber)[stepper bodyPlanetNumber]];
     setLabelText(bodyLabel, bodyName);
     setLabelText(stepLabel, [stepper stepLabelWithBodyName:bodyName]);

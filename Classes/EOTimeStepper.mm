@@ -309,10 +309,32 @@ static const int numBodies = sizeof(bodyPlanets) / sizeof(bodyPlanets[0]);
     }
 }
 
+//// the transport
+
+- (void)stop {
+    [self endPress];
+    time->stop();
+    [client transportDidChange];
+}
+
+- (void)play {
+    [self endPress];
+    time->setWarp(1.0);   // not start(): that would resume at whatever speed preceded the freeze
+    [client transportDidChange];
+}
+
 - (void)now {
     [self endPress];
     time->resetToLocal();
     [client transportDidChange];
+}
+
+- (bool)isRunning {
+    return !time->isStopped();
+}
+
+- (bool)isAtPresent {
+    return time->isCorrect();
 }
 
 @end

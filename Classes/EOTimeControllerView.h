@@ -20,7 +20,9 @@
 @interface EOTimeControllerView : UIView <UIGestureRecognizerDelegate> {
     EOTimeStepper  *stepper;        // EOClock's; not retained
     EOClock        *clock;          // not retained
-    UIButton       *nowButton;
+    UIButton       *nowButton;      // Now ▶, while the time is not the present
+    UIButton       *pauseButton;    // ‖, while the clock runs
+    UIButton       *playButton;     // ▶, while it is stopped (◀ joins it with reverse running)
     UIButton       *closeButton;
     UILabel        *statusLabel;
     UILabel        *stepByLabel;
@@ -34,6 +36,8 @@
     bool           bodyRowShown;    // the ‹ Body › row is laid out (rise / set / transit only)
     EOTimeStepUnit shownUnit;       // the chip currently drawn as selected
     int            shownHeld;       // 0, or the direction of the pair button drawn as held
+    bool           shownAtPresent;  // the transport row as last laid out: Now hidden, and
+    bool           shownRunning;    // ‖ rather than ▶
     bool           faded;           // the scrub fade is on
     bool           userMoved;       // the user dragged the panel: offset is theirs, not the corner's
     CGPoint        offset;          // the panel's centre relative to the clock centre, y up, canvas units

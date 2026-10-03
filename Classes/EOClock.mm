@@ -470,6 +470,7 @@ BOOL timeChanged = false;
 			  status];
 	dateLabel.textColor = [UIColor whiteColor];
     }
+    nowBut.hidden = dateLabel.hidden || time->isCorrect();
 }
 
 // Show or hide the strip (and the status bar with it) as the controller opens and closes and as the time
@@ -479,11 +480,17 @@ BOOL timeChanged = false;
 	return;
     }
     bool visible = [self timeStripVisible];
-    if (dateLabel.hidden == !visible) {
-	return;
+    bool changed = (dateLabel.hidden == visible);
+    [self setTimeStripHidden:!visible];	// always: the Now button follows the time as well as the strip
+    if (changed) {
+	[self setStatusBar:NULL];
     }
-    dateLabel.hidden = !visible;
-    [self setStatusBar:NULL];
+}
+
+// The strip is two widgets: the label, and its Now button, shown only while the time is not the present
+- (void)setTimeStripHidden:(bool)hidden {
+    dateLabel.hidden = hidden;
+    nowBut.hidden = hidden || time->isCorrect();
 }
 
 //// what the time stepper tells us
@@ -940,6 +947,8 @@ static bool firstAfterComingToForeground = true;
 	} else {
 	    [self openTimePanel];
 	}
+    } else if (sender == nowBut) {
+	[stepper now];	// back to the present; the panel, if open, stays open
     } else if (sender == NTPStatusBut) {
         ESTime::resync(true/*userRequested*/);
     } else {
@@ -954,7 +963,7 @@ static bool firstAfterComingToForeground = true;
 //	resetBool = yearBool = dayBool = hourBool = monthBool = lunarBool = minuteBool = false;
     } else if (sender == azBut || sender == altBut || sender == snoozeBut) {
 	// do nothing
-    } else if (sender == NTPStatusBut || sender == demoBut) {
+    } else if (sender == NTPStatusBut || sender == demoBut || sender == nowBut) {
 	// do nothing
     } else {
 	ESAssert(false);
@@ -1485,6 +1494,10 @@ static double resetX;
 static double resetY;
 static double advButtonWidth;
 static double advButtonHeight;
+// The strip's Now button, at the strip's right end
+static const double nowButtonWidth = 72;
+static const double nowButtonHeight = 24;
+static const double nowButtonMargin = 10;
 
 - (void)initializeConstantsForOrientation:(UIInterfaceOrientation)orientation {
     headerLineWidth = 2;
@@ -1951,6 +1964,14 @@ static bool localeIsCyrillic() {
     resetBut.titleLabel.adjustsFontSizeToFitWidth = YES;
     //resetBut.titleLabel.font = [UIFont fontWithName:@"Arial" size:18];
 
+    // The strip's Now button, at its right end: back to the present (shown only while the time is not it; see updateTimeStrip)
+    nowBut = [self createButtonAtX:fullWidth/2-nowButtonMargin-nowButtonWidth/2 Y:fullHeight/2-20 width:nowButtonWidth height:nowButtonHeight highlight:true
+			     text:[NSString stringWithFormat:@"%@ ▶", NSLocalizedString(@"Now", @"button: return the clock to the present")] color:[UIColor whiteColor]];
+    nowBut.titleLabel.font = [UIFont boldSystemFontOfSize:14];	// the strip's font
+    nowBut.layer.cornerRadius = 6;
+    nowBut.layer.borderWidth = 1;
+    nowBut.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.6].CGColor;
+
 #ifdef INNER_SUBDIALS
     // inner subdial hands
     utcHourHand = [[[EOHandTriangleView alloc] initWithKind:EOUTCHours   length:subR*.55 width:5 x:UTCX y:UTCY update:1 strokeColor:[UIColor lightGrayColor] fillColor:[UIColor grayColor]] autorelease];
@@ -2349,6 +2370,7 @@ static bool localeIsCyrillic() {
 	lastOrientation = newOrientation;
 	
 	[self reorientSubView:dateLabel toOrientation:newOrientation offsetBy:CGPointMake(0, fullHeight/2-20)];
+	[self reorientSubView:nowBut toOrientation:newOrientation offsetBy:CGPointMake(fullWidth/2-nowButtonMargin-nowButtonWidth/2, fullHeight/2-20)];
     }
 }
 
@@ -2400,7 +2422,7 @@ static bool localeIsCyrillic() {
     // Not [UIApplication setStatusBarHidden:], which is a no-op as of iOS 27; the view controller owns this now
     OrreryAppDelegate *appDelegate = (OrreryAppDelegate *)[[UIApplication sharedApplication] delegate];
     appDelegate.mainViewController.statusBarHidden = false;
-    dateLabel.hidden = true;
+    [self setTimeStripHidden:true];
 }
 
 - (void)resetAfterOrientationChangeToOrientation:(UIInterfaceOrientation)newOrientation newSize:(CGSize)newSize {
@@ -2411,7 +2433,7 @@ static bool localeIsCyrillic() {
         finishingHelp = false;
     } else {
 	[self setStatusBar:NULL];
-        dateLabel.hidden = ![self timeStripVisible];
+        [self setTimeStripHidden:![self timeStripVisible]];
     }
 }
 
@@ -2477,6 +2499,7 @@ static bool localeIsCyrillic() {
     [snoozeBut release];
     [demoBut release];
     [resetBut release];
+    [nowBut release];
     [timePanel removeFromSuperview];
     [timePanel release];
     [stepper release];

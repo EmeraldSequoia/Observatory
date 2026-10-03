@@ -3,10 +3,10 @@
 //  Emerald Observatory
 //
 //  The time controller's model: which unit a step means, the body for the
-//  rise / set / transit events, the hold-to-scrub state machine, and the
-//  operations on the clock's ESWatchTime.  No UIKit here, so it can be
-//  compiled and exercised outside the app; the clock that owns it is reached
-//  only through EOTimeStepperClient.
+//  rise / set / transit events, the hold-to-scrub state machine, the
+//  transport, and the operations on the clock's ESWatchTime.  No UIKit here,
+//  so it can be compiled and exercised outside the app; the clock that owns
+//  it is reached only through EOTimeStepperClient.
 //
 //  Design: chronometer-web planning/2026-09-25-ios-backport-observatory-time-controller.md
 //
@@ -97,7 +97,12 @@ typedef enum EOTimeScrubState {
 // From the clock's tick: one unit per tick while a scrub runs
 - (void)scrubTick;
 
-// Back to the present, running
+// The transport: ‖ freezes the clock where it is, ▶ runs it on from there at real speed,
+// Now returns to the present (running)
+- (void)stop;
+- (void)play;
 - (void)now;
+- (bool)isRunning;      // the clock is moving
+- (bool)isAtPresent;    // it shows the present, so there is nothing to return to
 
 @end

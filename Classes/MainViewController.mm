@@ -49,7 +49,7 @@
     traceEnter("flipsideViewControllerDidFinish");
     [EOClock theClock].finishingHelp = true;        // so we don't turn off the status bar too soon if there was a rotation during Help mode
     [[EOClock theClock] setStatusBar:nil];
-    [EOClock theClock].dateLabel.hidden = true;
+    [[EOClock theClock] setTimeStripHidden:true];
     [self dismissViewControllerAnimated:YES completion:NULL];
     [baseView setNeedsDisplay];
     traceExit ("flipsideViewControllerDidFinish");
@@ -72,7 +72,7 @@
 - (void)viewDidAppear:(BOOL)animated {
     traceEnter("viewDidAppear");
     [[EOClock theClock] setStatusBar:nil];
-    [EOClock theClock].dateLabel.hidden = ![[EOClock theClock] timeStripVisible];
+    [[EOClock theClock] setTimeStripHidden:![[EOClock theClock] timeStripVisible]];
     [super viewDidAppear:animated];
     traceExit ("viewDidAppear");
 }
