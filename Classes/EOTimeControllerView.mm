@@ -7,6 +7,7 @@
 
 #import "EOTimeControllerView.h"
 #import "EOClock.h"
+#import "Utilities.h"
 #import <QuartzCore/QuartzCore.h>
 
 // Geometry, in canvas units: the web panel's CSS values, with a sixth chip column for "cent"
@@ -14,22 +15,24 @@ static const double panelWidth = 308;
 static const double padTop = 10;
 static const double padSide = 12;
 static const double padBottom = 12;
-static const double rowHeight = 44;         // transport buttons, chips
+static const double rowHeight = 44;         // transport buttons, chips, the body row
 static const double pairHeight = 56;        // the ◀ ▶ buttons
 static const double gap = 4;
-static const int    chipColumns = 6;
+static const int    chipColumns = 6;        // a short last row stretches its chips to the same width
 static const double panelRadius = 14;
 static const double buttonRadius = 8;
 static const double cornerMarginRight = 12;
 static const double cornerMarginBottom = 56;    // clear of the Options (i) button at the window's lower right
 static const double scrubAlpha = 0.38;          // the panel while a scrub runs (the web's tuned level)
 static const NSTimeInterval fadeDuration = 0.15;
+static const NSTimeInterval flashDuration = 0.3;    // a pair button after a search that found nothing
 
 static UIColor *rgb(int r, int g, int b) {
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:1];
 }
 
-// The looks a button can have: the web's .tp-btn, .tp-btn.holding, .tp-chip and .tp-chip.active
+// The looks a button can have: the web's .tp-btn, .tp-btn.holding, .tp-btn.flash-fail,
+// .tp-chip, .tp-chip-astro and their .active states
 static void styleButton(UIButton *button, UIColor *background, UIColor *border, UIColor *text) {
     button.backgroundColor = background;
     button.layer.borderColor = border.CGColor;
@@ -44,9 +47,15 @@ static void styleAsHolding(UIButton *button) {
     styleButton(button, rgb(0x55, 0x55, 0x66), rgb(0x88, 0xaa, 0xff), rgb(0xcc, 0xcc, 0xff));
 }
 
-static void styleAsChip(UIButton *button, bool selected) {
+static void styleAsFailed(UIButton *button) {
+    styleButton(button, rgb(0x44, 0x33, 0x22), rgb(0x77, 0x55, 0x44), rgb(0xaa, 0x88, 0x66));
+}
+
+static void styleAsChip(UIButton *button, bool selected, bool astro) {
     if (selected) {
         styleButton(button, rgb(0x2a, 0x2a, 0x3e), rgb(0x88, 0xaa, 0xff), rgb(0x88, 0xaa, 0xff));
+    } else if (astro) {   // tinted, so the group reads as one
+        styleButton(button, rgb(0x1e, 0x25, 0x36), rgb(0x34, 0x40, 0x5c), rgb(0x7a, 0x8a, 0xa8));
     } else {
         styleButton(button, rgb(0x22, 0x22, 0x38), rgb(0x3a, 0x3a, 0x5e), rgb(0x77, 0x77, 0x88));
     }
@@ -61,9 +70,8 @@ static void setLabelText(UILabel *label, NSString *text) {
 
 @implementation EOTimeControllerView
 
-- (UIButton *)addButtonWithTitle:(NSString *)title frame:(CGRect)frame font:(UIFont *)font {
+- (UIButton *)addButtonWithTitle:(NSString *)title font:(UIFont *)font {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
-    button.frame = frame;
     [button setTitle:title forState:UIControlStateNormal];
     button.titleLabel.font = font;
     button.titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -75,8 +83,8 @@ static void setLabelText(UILabel *label, NSString *text) {
     return button;
 }
 
-- (UILabel *)addLabelWithFrame:(CGRect)frame font:(UIFont *)font color:(UIColor *)color {
-    UILabel *label = [[UILabel alloc] initWithFrame:frame];
+- (UILabel *)addLabelWithFont:(UIFont *)font color:(UIColor *)color {
+    UILabel *label = [[UILabel alloc] initWithFrame:CGRectZero];
     label.font = font;
     label.textColor = color;
     label.textAlignment = NSTextAlignmentCenter;
@@ -91,6 +99,7 @@ static void setLabelText(UILabel *label, NSString *text) {
     if ((self = [super initWithFrame:CGRectMake(0, 0, panelWidth, 100)])) {
         stepper = aStepper;
         clock = aClock;
+        bodyRowShown = [EOTimeStepper unitUsesBody:stepper.unit];
         shownUnit = EOTimeStepNumUnits;     // nothing drawn as selected yet
         shownHeld = 0;
         faded = false;
@@ -103,53 +112,42 @@ static void setLabelText(UILabel *label, NSString *text) {
         self.layer.borderColor = rgb(0x3a, 0x3a, 0x5e).CGColor;
         self.hidden = YES;
 
-        UIFont *chipFont = [UIFont fontWithName:@"Arial" size:12];
-        UIFont *glyphFont = [UIFont systemFontOfSize:20];
-        double inner = panelWidth - 2 * padSide;
-        double y = padTop;
-
-        // The top row: Now (the transport's other buttons arrive with the running modes), and the close ×
+        // The widgets, top to bottom; layoutWidgets gives them their frames
         nowButton = [self addButtonWithTitle:[NSString stringWithFormat:@"%@ ▶", NSLocalizedString(@"Now", @"button: return the clock to the present")]
-                                       frame:CGRectMake(padSide, y, inner - rowHeight - gap, rowHeight)
                                         font:[UIFont fontWithName:@"Arial" size:15]];
         styleAsPlain(nowButton);
         [nowButton addTarget:self action:@selector(nowPressed:) forControlEvents:UIControlEventTouchDown];
-        closeButton = [self addButtonWithTitle:@"×"
-                                         frame:CGRectMake(padSide + inner - rowHeight, y, rowHeight, rowHeight)
-                                          font:[UIFont systemFontOfSize:24]];
+        closeButton = [self addButtonWithTitle:@"×" font:[UIFont systemFontOfSize:24]];
         styleButton(closeButton, [UIColor clearColor], [UIColor clearColor], rgb(0x66, 0x66, 0x77));
         [closeButton addTarget:self action:@selector(closeTapped:) forControlEvents:UIControlEventTouchUpInside];
-        y += rowHeight + 6;
 
-        // The status line
-        statusLabel = [self addLabelWithFrame:CGRectMake(padSide, y, inner, 14)
-                                         font:[UIFont fontWithName:@"Arial" size:11]
-                                        color:rgb(0x88, 0xaa, 0xff)];
-        y += 14 + 8;
+        statusLabel = [self addLabelWithFont:[UIFont fontWithName:@"Arial" size:11] color:rgb(0x88, 0xaa, 0xff)];
 
-        // "STEP BY" and the chips: six columns, the chips of a short second row the same width as the first's
-        stepByLabel = [self addLabelWithFrame:CGRectMake(padSide, y, inner, 12)
-                                         font:[UIFont fontWithName:@"Arial" size:10]
-                                        color:rgb(0x66, 0x66, 0x77)];
+        stepByLabel = [self addLabelWithFont:[UIFont fontWithName:@"Arial" size:10] color:rgb(0x66, 0x66, 0x77)];
         stepByLabel.text = [NSLocalizedString(@"Step by", @"caption above the unit chips") uppercaseString];
-        y += 12 + 5;
-        double chipWidth = (inner - (chipColumns - 1) * gap) / chipColumns;
+        UIFont *chipFont = [UIFont fontWithName:@"Arial" size:12];
         for (int i = 0; i < EOTimeStepNumUnits; i++) {
-            int row = i / chipColumns;
-            int column = i % chipColumns;
-            CGRect frame = CGRectMake(padSide + column * (chipWidth + gap), y + row * (rowHeight + gap), chipWidth, rowHeight);
-            chips[i] = [self addButtonWithTitle:[EOTimeStepper labelForUnit:(EOTimeStepUnit)i] frame:frame font:chipFont];
+            chips[i] = [self addButtonWithTitle:[EOTimeStepper labelForUnit:(EOTimeStepUnit)i] font:chipFont];
             chips[i].tag = i;
-            styleAsChip(chips[i], false);
+            styleAsChip(chips[i], false, [EOTimeStepper unitIsAstro:(EOTimeStepUnit)i]);
             [chips[i] addTarget:self action:@selector(chipTapped:) forControlEvents:UIControlEventTouchUpInside];
         }
-        int chipRows = (EOTimeStepNumUnits + chipColumns - 1) / chipColumns;
-        y += chipRows * rowHeight + (chipRows - 1) * gap + 8;
+
+        // ‹ Body ›, for rise / set / transit
+        UIFont *glyphFont = [UIFont systemFontOfSize:22];
+        bodyPrevButton = [self addButtonWithTitle:@"‹" font:glyphFont];
+        bodyNextButton = [self addButtonWithTitle:@"›" font:glyphFont];
+        styleAsPlain(bodyPrevButton);
+        styleAsPlain(bodyNextButton);
+        [bodyPrevButton addTarget:self action:@selector(bodyStepped:) forControlEvents:UIControlEventTouchUpInside];
+        [bodyNextButton addTarget:self action:@selector(bodyStepped:) forControlEvents:UIControlEventTouchUpInside];
+        bodyLabel = [self addLabelWithFont:[UIFont fontWithName:@"Arial" size:15] color:rgb(0x88, 0xaa, 0xff)];
 
         // The pair: tap to step, hold to scrub.  UIControl keeps tracking a touch wherever it goes,
         // so the release reaches the button however far the finger has wandered.
-        backButton = [self addButtonWithTitle:@"◀" frame:CGRectMake(padSide, y, pairHeight, pairHeight) font:glyphFont];
-        forwardButton = [self addButtonWithTitle:@"▶" frame:CGRectMake(padSide + inner - pairHeight, y, pairHeight, pairHeight) font:glyphFont];
+        UIFont *pairFont = [UIFont systemFontOfSize:20];
+        backButton = [self addButtonWithTitle:@"◀" font:pairFont];
+        forwardButton = [self addButtonWithTitle:@"▶" font:pairFont];
         styleAsPlain(backButton);
         styleAsPlain(forwardButton);
         for (UIButton *button in [NSArray arrayWithObjects:backButton, forwardButton, nil]) {
@@ -157,14 +155,9 @@ static void setLabelText(UILabel *label, NSString *text) {
             [button addTarget:self action:@selector(stepTouchUp:)
                  forControlEvents:(UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchCancel)];
         }
-        stepLabel = [self addLabelWithFrame:CGRectMake(padSide + pairHeight + 6, y, inner - 2 * pairHeight - 12, pairHeight)
-                                       font:[UIFont fontWithName:@"Arial-BoldMT" size:15]
-                                      color:rgb(0xcc, 0xcc, 0xdd)];
-        y += pairHeight + 4;
+        stepLabel = [self addLabelWithFont:[UIFont fontWithName:@"Arial-BoldMT" size:15] color:rgb(0xcc, 0xcc, 0xdd)];
 
-        CGRect frame = self.frame;
-        frame.size.height = y + padBottom;
-        self.frame = frame;
+        [self layoutWidgets];
 
         // Dragging, from the captions, labels and background only: a touch that begins on a button
         // is the button's (see gestureRecognizer:shouldReceiveTouch:)
@@ -179,8 +172,75 @@ static void setLabelText(UILabel *label, NSString *text) {
 }
 
 - (void)dealloc {
+    [NSObject cancelPreviousPerformRequestsWithTarget:self];
     // The widgets are the view hierarchy's; the stepper and the clock are not ours
     [super dealloc];
+}
+
+//// Layout
+
+// Frames for every widget, top to bottom, and the panel's height to match; the body row is laid
+// out only while a rise / set / transit unit is selected
+- (void)layoutWidgets {
+    double inner = panelWidth - 2 * padSide;
+    double y = padTop;
+
+    // The top row: Now, and the close ×
+    nowButton.frame = CGRectMake(padSide, y, inner - rowHeight - gap, rowHeight);
+    closeButton.frame = CGRectMake(padSide + inner - rowHeight, y, rowHeight, rowHeight);
+    y += rowHeight + 6;
+
+    statusLabel.frame = CGRectMake(padSide, y, inner, 14);
+    y += 14 + 8;
+
+    // "STEP BY" and the chips, six to a row; a short last row's chips share its width
+    stepByLabel.frame = CGRectMake(padSide, y, inner, 12);
+    y += 12 + 5;
+    for (int first = 0; first < EOTimeStepNumUnits; first += chipColumns) {
+        int count = EOTimeStepNumUnits - first;
+        if (count > chipColumns) {
+            count = chipColumns;
+        }
+        double chipWidth = (inner - (count - 1) * gap) / count;
+        for (int i = 0; i < count; i++) {
+            chips[first + i].frame = CGRectMake(padSide + i * (chipWidth + gap), y, chipWidth, rowHeight);
+        }
+        y += rowHeight + gap;
+    }
+    y += 8 - gap;
+
+    // ‹ Body ›
+    bodyPrevButton.hidden = bodyNextButton.hidden = bodyLabel.hidden = !bodyRowShown;
+    if (bodyRowShown) {
+        bodyPrevButton.frame = CGRectMake(padSide, y, rowHeight, rowHeight);
+        bodyNextButton.frame = CGRectMake(padSide + inner - rowHeight, y, rowHeight, rowHeight);
+        bodyLabel.frame = CGRectMake(padSide + rowHeight + 6, y, inner - 2 * rowHeight - 12, rowHeight);
+        y += rowHeight + 8;
+    }
+
+    // The pair
+    backButton.frame = CGRectMake(padSide, y, pairHeight, pairHeight);
+    forwardButton.frame = CGRectMake(padSide + inner - pairHeight, y, pairHeight, pairHeight);
+    stepLabel.frame = CGRectMake(padSide + pairHeight + 6, y, inner - 2 * pairHeight - 12, pairHeight);
+    y += pairHeight + 4;
+
+    CGRect frame = self.frame;
+    frame.size.height = y + padBottom;
+    self.frame = frame;
+}
+
+- (void)setBodyRowShown:(bool)shown {
+    if (shown == bodyRowShown) {
+        return;
+    }
+    double oldHeight = self.bounds.size.height;
+    bodyRowShown = shown;
+    [self layoutWidgets];
+    if (userMoved) {
+        // Grow and shrink from the bottom edge, where the pair is, so the buttons stay put under the finger
+        offset.y += (self.bounds.size.height - oldHeight) / 2;
+    }
+    [self placeWithClockCenter:clockCenter halfWidth:halfWidth halfHeight:halfHeight];
 }
 
 //// Placement
@@ -233,8 +293,15 @@ static void setLabelText(UILabel *label, NSString *text) {
     [self refresh];
 }
 
+- (void)bodyStepped:(UIButton *)sender {
+    [stepper stepBody:(sender == bodyNextButton ? 1 : -1)];
+    [self refresh];
+}
+
 - (void)stepTouchDown:(UIButton *)sender {
-    [stepper pressInDirection:(sender == forwardButton ? 1 : -1)];
+    if (![stepper pressInDirection:(sender == forwardButton ? 1 : -1)]) {
+        [self flashFailure:sender];     // an astro search found no event here
+    }
     [self refresh];
 }
 
@@ -243,16 +310,31 @@ static void setLabelText(UILabel *label, NSString *text) {
     [self refresh];
 }
 
+// The web's .flash-fail: the pressed button turns brown for a moment
+- (void)flashFailure:(UIButton *)button {
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(unflash:) object:button];
+    styleAsFailed(button);
+    [self performSelector:@selector(unflash:) withObject:button afterDelay:flashDuration];
+}
+
+- (void)unflash:(UIButton *)button {
+    styleAsPlain(button);
+}
+
 //// Keeping the panel current
 
 - (void)refresh {
-    setLabelText(statusLabel, [stepper statusString]);
-    setLabelText(stepLabel, [stepper stepLabel]);
-
     EOTimeStepUnit unit = stepper.unit;
+    [self setBodyRowShown:[EOTimeStepper unitUsesBody:unit]];
+
+    setLabelText(statusLabel, [stepper statusString]);
+    NSString *bodyName = [Utilities nameOfPlanetWithNumber:(ECPlanetNumber)[stepper bodyPlanetNumber]];
+    setLabelText(bodyLabel, bodyName);
+    setLabelText(stepLabel, [stepper stepLabelWithBodyName:bodyName]);
+
     if (unit != shownUnit) {
         for (int i = 0; i < EOTimeStepNumUnits; i++) {
-            styleAsChip(chips[i], i == unit);
+            styleAsChip(chips[i], i == unit, [EOTimeStepper unitIsAstro:(EOTimeStepUnit)i]);
         }
         shownUnit = unit;
     }

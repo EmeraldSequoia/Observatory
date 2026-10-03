@@ -2,11 +2,12 @@
 //  EOTimeControllerView.h
 //  Emerald Observatory
 //
-//  The time controller panel: the unit chips, the ◀ ▶ pair (tap to step, hold
-//  to scrub), the transport row and the status line.  It drives an
-//  EOTimeStepper and reads it back once per clock tick (refresh).  Laid out in
-//  canvas units like the rest of the clock; opens at the lower right and can
-//  be dragged from its captions or background.
+//  The time controller panel: the unit chips, the ‹ Body › row for the rise /
+//  set / transit events, the ◀ ▶ pair (tap to step, hold to scrub), the
+//  transport row and the status line.  It drives an EOTimeStepper and reads
+//  it back once per clock tick (refresh).  Laid out in canvas units like the
+//  rest of the clock; opens at the lower right and can be dragged from its
+//  captions or background.
 //
 //  Design: chronometer-web planning/2026-09-25-ios-backport-observatory-time-controller.md
 //
@@ -24,9 +25,13 @@
     UILabel        *statusLabel;
     UILabel        *stepByLabel;
     UIButton       *chips[EOTimeStepNumUnits];
+    UIButton       *bodyPrevButton;
+    UILabel        *bodyLabel;
+    UIButton       *bodyNextButton;
     UIButton       *backButton;
     UIButton       *forwardButton;
     UILabel        *stepLabel;
+    bool           bodyRowShown;    // the ‹ Body › row is laid out (rise / set / transit only)
     EOTimeStepUnit shownUnit;       // the chip currently drawn as selected
     int            shownHeld;       // 0, or the direction of the pair button drawn as held
     bool           faded;           // the scrub fade is on

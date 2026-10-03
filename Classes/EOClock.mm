@@ -499,6 +499,10 @@ BOOL timeChanged = false;
     [self updateTimeStripVisibility];
 }
 
+- (int)dialPlanetNumber {
+    return altHand.planet;	// the controller's body for rise / set / transit until the user picks one
+}
+
 //// the time controller panel
 
 - (void)placeTimePanel {

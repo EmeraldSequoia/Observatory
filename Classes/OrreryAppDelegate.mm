@@ -42,6 +42,7 @@ static bool currentDAL;
     NSNumber *defaultSSP = [NSNumber numberWithBool:NO];
     NSNumber *defaultPlanet = [NSNumber numberWithInt:ECPlanetSun];
     NSString *defaultTimeStepUnit = @"day";
+    NSNumber *defaultTimeStepBody = [NSNumber numberWithInt:-1];	// follow the altitude/azimuth dials' planet
     NSMutableDictionary *defaultsDict = [NSMutableDictionary dictionaryWithObjectsAndKeys:
 					 defaultUNTP,	    @"EOUseNTP",
 					 defaultULS,	    @"EOUseLocationServices",
@@ -49,6 +50,7 @@ static bool currentDAL;
  					 defaultSSP,	    @"EOShowSubsolarPoint",
 					 defaultPlanet,	    @"EOPlanet",
 					 defaultTimeStepUnit, @"EOTimeStepUnit",
+					 defaultTimeStepBody, @"EOTimeStepBody",
 					 nil ];
     [[NSUserDefaults standardUserDefaults] registerDefaults:defaultsDict];
 }
