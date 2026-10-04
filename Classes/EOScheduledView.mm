@@ -73,8 +73,15 @@ static double offsetter = 29.5;
 }
 
 - (void)tick:(bool)forceIt {
-    NSTimeInterval now = [EOClock theClock].time->currentTime();
-    if (forceIt || now > target) {
+    ESWatchTime *time = [EOClock theClock].time;
+    NSTimeInterval now = time->currentTime();
+    if (time->runningBackward()) {
+	// The time controller's ◀: now decreases, so the next update is at the period boundary before it
+	if (forceIt || now < target) {
+	    target = ceil((now-update) / update) * update - updateOffset;
+	    [self update];
+	}
+    } else if (forceIt || now > target) {
 	target = floor((now+update) / update) * update + updateOffset;
 	[self update];
     }
@@ -85,8 +92,10 @@ static double offsetter = 29.5;
 }
 
 - (void)resetTarget {
-    NSTimeInterval now = [EOClock theClock].time->currentTime();
-    target = floor(now / update) * update;
+    ESWatchTime *time = [EOClock theClock].time;
+    NSTimeInterval now = time->currentTime();
+    // The boundary now has just passed (the one ahead, running backward), so the next tick updates
+    target = time->runningBackward() ? ceil(now / update) * update : floor(now / update) * update;
 }
 
 - (void)update {
