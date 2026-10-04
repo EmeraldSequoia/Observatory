@@ -201,13 +201,13 @@ nil,
 NSString *h2 = NSLocalizedStringWithDefaultValue(@"Help Text2",
 nil,
 [NSBundle mainBundle],
-@"Tap 'Set' to enter set mode.  Then tap one of the time units to move forward (blue) or backward (red) by that amount.  Tapping 'phase' moves forward or back to the next quarter phase of the Moon.",
+@"Tap 'Set' to open the time controller.  Choose what a step means — a century, year, month, day, hour, minute or second, or the rise, set or transit of a body, or the Moon's quarter phase — then tap ◀ or ▶ to move the time back or forward by one.  You can also type a date and time, run the clock forward or backward at normal speed with ▶ and ◀ in the top row, and stop it with ‖.",
 @"help message2");
 
 NSString *h3 = NSLocalizedStringWithDefaultValue(@"Help Text3",
 nil,
 [NSBundle mainBundle],
-@"Press and hold any of these spots to advance continuously.  Slide your finger off the button before raising it to 'latch' the button and advance continuously.  Tap 'Reset' to return to the present time.",
+@"Hold ◀ or ▶ to scrub through time; let go to stop.  Slide your finger off the button before lifting it and the scrub keeps going hands-free (a green padlock shows when a lift will do that); tap anywhere to stop it.  Tap 'Now' to return to the present, and 'Done', or anywhere on the display, to close the controller.",
 @"help message3");
 
 NSString *h4 = NSLocalizedStringWithDefaultValue(@"Help Text4",
