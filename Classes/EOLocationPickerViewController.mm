@@ -13,10 +13,21 @@
 #include "ESTimeLocAstroEnvironment.hpp"
 #include "ESDeviceLocationManager.hpp"
 #include "ESLocation.hpp"
+#include "ESGeoNames.hpp"
 
 #define BLUE_DOT_HIT_RADIUS 22.0  // points; a touch starting this close to the blue dot snaps to it while it stays this close
 #define CURSOR_RADIUS        12.0
-#define LABEL_OFFSET         44.0  // coordinate label's center above the finger, so the finger doesn't hide it
+#define LABEL_GAP            30.0  // between the finger and the label's nearer edge, so the finger doesn't hide it
+#define LABEL_PAD_X          18.0
+#define LABEL_PAD_Y          10.0
+#define LABEL_MAX_WIDTH      0.6   // of the map's width; a longer city name is truncated
+#define CITY_MAX_KM          200   // the label names no city when the nearest is farther than this (out at sea)
+#define CITY_MIN_POPULATION  10000 // smaller places are too many:  the name would change with every small move
+#define CITY_STICKINESS      1.5   // the city named stays until another one is this much better a match
+#define COORDINATE_FONT_SIZE 19.0  // the coordinates are the main thing...
+#define CITY_FONT_SIZE       14.0  // ...and the city below them just a hint of what's near
+#define LETTERS_TAB_OFFSET   0.5   // the tab stop for the letters after a number, just past the number's (it can't be at it)
+#define MAX_TEXT_SCALE       1.4   // Dynamic Type grows the label at most this much, so it doesn't cover the map
 
 #define ZOOM_OUT_DURATION    0.65  // seconds; a spring with a little overshoot, as if the map were lifted out of the clock
 #define ZOOM_OUT_DAMPING     0.72
@@ -30,15 +41,52 @@
 #define BORDER_GRAY          0.5
 #define BORDER_ALPHA         0.5
 
-static NSString *
-coordinateString(double latitudeDegrees, double longitudeDegrees) {
+// The latitude's number, what follows it (" N,"), the longitude's number, and what follows it (" E")
+static NSArray<NSString *> *
+coordinateParts(double latitudeDegrees, double longitudeDegrees) {
     NSString *ns = latitudeDegrees >= 0
 	? NSLocalizedString(@"N",@"one character abbreviation for 'north'")
 	: NSLocalizedString(@"S",@"one character abbreviation for 'south'");
     NSString *ew = longitudeDegrees >= 0
 	? NSLocalizedString(@"E",@"one character abbreviation for 'east'")
 	: NSLocalizedString(@"W",@"one character abbreviation for 'west'");
-    return [NSString stringWithFormat:@"%.2f° %@, %.2f° %@", fabs(latitudeDegrees), ns, fabs(longitudeDegrees), ew];
+    return @[ [NSString stringWithFormat:@"%.2f°", fabs(latitudeDegrees)], [NSString stringWithFormat:@" %@,", ns],
+	      [NSString stringWithFormat:@"%.2f°", fabs(longitudeDegrees)], [NSString stringWithFormat:@" %@", ew] ];
+}
+
+// Each number ends at a right-aligned tab stop, and what follows it starts at a left-aligned one just after (a right
+// tab aligns everything up to the next tab), so the letters stay put as the number's width changes
+static NSString *
+coordinateString(double latitudeDegrees, double longitudeDegrees) {
+    NSArray<NSString *> *parts = coordinateParts(latitudeDegrees, longitudeDegrees);
+    return [NSString stringWithFormat:@"\t%@\t%@\t%@\t%@", parts[0], parts[1], parts[2], parts[3]];
+}
+
+// The "City, Country" of the best-known city near the given point, in the time zone the nearest city would set, or
+// nil if there is no city near
+static NSString *
+cityString(ESGeoNames *geoNames, double latitudeDegrees, double longitudeDegrees) {
+    if (!geoNames->findBestMatchCityInTZOfClosestCity(latitudeDegrees, longitudeDegrees, CITY_MAX_KM, CITY_MIN_POPULATION, CITY_STICKINESS)) {
+	return nil;
+    }
+    NSString *city = [NSString stringWithUTF8String:geoNames->selectedCityName().c_str()];
+    if (city.length == 0) {
+	return nil;
+    }
+    // The country name from iOS, in the app's language, rather than the English one in the city data
+    NSString *code = [NSString stringWithUTF8String:geoNames->selectedCityCountryCode().c_str()];
+    NSLocale *locale = [NSLocale localeWithLocaleIdentifier:[[[NSBundle mainBundle] preferredLocalizations] firstObject]];
+    NSString *country = code.length > 0 ? [locale localizedStringForCountryCode:code] : nil;
+    if (country.length == 0) {
+	return city;
+    }
+    return [NSString stringWithFormat:NSLocalizedString(@"%@, %@", @"nearest city on the location picker map: city, country"), city, country];
+}
+
+// Dynamic Type scale for the label's fonts
+static CGFloat
+textScale() {
+    return fmin([[UIFontMetrics metricsForTextStyle:UIFontTextStyleBody] scaledValueForValue:1], MAX_TEXT_SCALE);
 }
 
 @implementation EOLocationPickerMapView
@@ -97,15 +145,30 @@ coordinateString(double latitudeDegrees, double longitudeDegrees) {
 	cursorLayer.hidden = YES;
 	[self.layer addSublayer:cursorLayer];
 
+	labelPlate = [[UIView alloc] init];
+	labelPlate.backgroundColor = [UIColor colorWithWhite:0 alpha:0.7];
+	labelPlate.layer.cornerRadius = 10;
+	labelPlate.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.15].CGColor;  // a hairline, echoing the map's border
+	labelPlate.layer.borderWidth = 1 / [UIScreen mainScreen].scale;
+	labelPlate.userInteractionEnabled = NO;
+	labelPlate.hidden = YES;
+	[self addSubview:labelPlate];
+	cityLabel = [[UILabel alloc] init];
+	cityLabel.textColor = [UIColor colorWithWhite:1 alpha:0.75];
+	cityLabel.textAlignment = NSTextAlignmentCenter;
+	cityLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+	[labelPlate addSubview:cityLabel];
 	coordinateLabel = [[UILabel alloc] init];
-	coordinateLabel.font = [UIFont monospacedDigitSystemFontOfSize:17 weight:UIFontWeightMedium];
-	coordinateLabel.textColor = [UIColor whiteColor];
 	coordinateLabel.textAlignment = NSTextAlignmentCenter;
-	coordinateLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.7];
-	coordinateLabel.layer.cornerRadius = 6;
-	coordinateLabel.layer.masksToBounds = YES;
-	coordinateLabel.hidden = YES;
-	[self addSubview:coordinateLabel];
+	coordinateLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+	[labelPlate addSubview:coordinateLabel];
+
+	[self registerForTraitChanges:@[ [UITraitPreferredContentSizeCategory class] ] withAction:@selector(contentSizeCategoryChanged)];
+
+	// Load the city data now, while the map zooms out, so the first touch doesn't wait for it
+	geoNames = new ESGeoNames;
+	ESLocation *location = [[EOClock theClock] env]->location();
+	[self updateCityForLatitude:location->latitudeDegrees() longitude:location->longitudeDegrees()];
     }
     return self;
 }
@@ -190,6 +253,79 @@ coordinateString(double latitudeDegrees, double longitudeDegrees) {
     return CGPointMake(fmin(fmax(p.x, 0), size.width), fmin(fmax(p.y, 0), size.height));
 }
 
+// Looks the city up again only when the position shown in the label changes
+- (void)updateCityForLatitude:(double)latitudeDegrees longitude:(double)longitudeDegrees {
+    long keyLatitude = lround(latitudeDegrees * 100);
+    long keyLongitude = lround(longitudeDegrees * 100);
+    if (cityKeyValid && keyLatitude == cityKeyLatitude && keyLongitude == cityKeyLongitude) {
+	return;
+    }
+    cityKeyValid = true;
+    cityKeyLatitude = keyLatitude;
+    cityKeyLongitude = keyLongitude;
+    [cityText release];
+    cityText = [cityString(geoNames, latitudeDegrees, longitudeDegrees) retain];
+}
+
+// Hoefler Text, for the elegance of the rest of the app
+- (void)makeFonts {
+    if (cityFont) {
+	return;
+    }
+    CGFloat scale = textScale();
+    cityFont = [[UIFont fontWithName:@"HoeflerText-Regular" size:CITY_FONT_SIZE * scale] retain];
+    coordinateFont = [[UIFont fontWithName:@"HoeflerText-Regular" size:COORDINATE_FONT_SIZE * scale] retain];
+
+    // Fixed-width fields for the numbers, as wide as the widest each can be.  The digits differ in width; 0 is the
+    // widest, and 9 and 8 the widest that can lead.
+    NSDictionary *attributes = @{ NSFontAttributeName : coordinateFont };
+    CGFloat latitudeWidth = 0;
+    for (NSString *number in @[ @"90.00°", @"80.00°" ]) {
+	latitudeWidth = fmax(latitudeWidth, [number sizeWithAttributes:attributes].width);
+    }
+    CGFloat longitudeWidth = 0;
+    for (NSString *number in @[ @"100.00°", @"180.00°", @"170.00°" ]) {
+	longitudeWidth = fmax(longitudeWidth, [number sizeWithAttributes:attributes].width);
+    }
+    // And for what follows each number:  " N," or " S,", and " E" or " W"
+    CGFloat separatorWidth = 0;
+    CGFloat endWidth = 0;
+    for (int sign = -1; sign <= 1; sign += 2) {
+	NSArray<NSString *> *parts = coordinateParts(sign, sign);
+	separatorWidth = fmax(separatorWidth, [parts[1] sizeWithAttributes:attributes].width);
+	endWidth = fmax(endWidth, [parts[3] sizeWithAttributes:attributes].width);
+    }
+    latitudeTabStop = ceil(latitudeWidth);
+    longitudeTabStop = latitudeTabStop + LETTERS_TAB_OFFSET + ceil(separatorWidth) + ceil(longitudeWidth);
+    coordinatesWidth = longitudeTabStop + LETTERS_TAB_OFFSET + ceil(endWidth);
+}
+
+// The coordinates, with their tab stops; or "Location Services", centered
+- (NSAttributedString *)coordinateText:(NSString *)text {
+    NSMutableParagraphStyle *style = [[[NSMutableParagraphStyle alloc] init] autorelease];
+    if (snappedToBlueDot) {
+	style.alignment = NSTextAlignmentCenter;
+    } else {
+	style.alignment = NSTextAlignmentLeft;
+	style.tabStops = @[ [[[NSTextTab alloc] initWithTextAlignment:NSTextAlignmentRight location:latitudeTabStop options:@{}] autorelease],
+			    [[[NSTextTab alloc] initWithTextAlignment:NSTextAlignmentLeft location:latitudeTabStop + LETTERS_TAB_OFFSET options:@{}] autorelease],
+			    [[[NSTextTab alloc] initWithTextAlignment:NSTextAlignmentRight location:longitudeTabStop options:@{}] autorelease],
+			    [[[NSTextTab alloc] initWithTextAlignment:NSTextAlignmentLeft location:longitudeTabStop + LETTERS_TAB_OFFSET options:@{}] autorelease] ];
+    }
+    return [[[NSAttributedString alloc] initWithString:text attributes:@{
+	NSFontAttributeName : coordinateFont,
+	NSForegroundColorAttributeName : [UIColor whiteColor],
+	NSParagraphStyleAttributeName : style }] autorelease];
+}
+
+// Remakes the fonts at the new Dynamic Type size
+- (void)contentSizeCategoryChanged {
+    [cityFont release];
+    cityFont = nil;
+    [coordinateFont release];
+    coordinateFont = nil;
+}
+
 - (void)moveCursorToPoint:(CGPoint)p {
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
@@ -197,31 +333,69 @@ coordinateString(double latitudeDegrees, double longitudeDegrees) {
     cursorLayer.position = p;
     [CATransaction commit];
 
-    coordinateLabel.hidden = NO;
+    // The coordinates above the city; "Location Services" alone on the blue dot
+    [self makeFonts];
+    NSAttributedString *coordinates;
+    NSString *city;
     if (snappedToBlueDot) {
-	coordinateLabel.text = NSLocalizedString(@"Location Services", @"label shown while touching the blue dot on the location picker map");
+	coordinates = [self coordinateText:NSLocalizedString(@"Location Services", @"label shown while touching the blue dot on the location picker map")];
+	city = nil;
     } else {
-	coordinateLabel.text = coordinateString([self latitudeForPoint:p], [self longitudeForPoint:p]);
+	double latitudeDegrees = [self latitudeForPoint:p];
+	double longitudeDegrees = [self longitudeForPoint:p];
+	[self updateCityForLatitude:latitudeDegrees longitude:longitudeDegrees];
+	coordinates = [self coordinateText:coordinateString(latitudeDegrees, longitudeDegrees)];
+	city = cityText;
     }
-    CGSize labelSize = [coordinateLabel sizeThatFits:CGSizeMake(CGFLOAT_MAX, CGFLOAT_MAX)];
-    labelSize.width += 16;
-    labelSize.height += 8;
-    CGFloat y = p.y - LABEL_OFFSET;
-    if (y - labelSize.height/2 < 0) {
-	y = p.y + LABEL_OFFSET;  // near the top edge, below the finger instead
+    coordinateLabel.attributedText = coordinates;
+    cityLabel.hidden = city == nil;
+    cityLabel.font = cityFont;
+    cityLabel.text = city;
+
+    // The coordinate line has a fixed width, centered on the plate, so the plate only changes width for a wider city
+    // name.  It always has room for the city line, so the coordinates don't jump up and down as a city comes and goes;
+    // but "Location Services" is alone on the plate.
+    CGSize coordinateSize = [coordinateLabel sizeThatFits:CGSizeMake(CGFLOAT_MAX, CGFLOAT_MAX)];
+    if (!snappedToBlueDot) {
+	coordinateSize.width = coordinatesWidth + 2;  // a little slack, so the line never truncates
     }
-    CGFloat x = fmin(fmax(p.x, labelSize.width/2), self.bounds.size.width - labelSize.width/2);
-    coordinateLabel.bounds = CGRectMake(0, 0, labelSize.width, labelSize.height);
-    coordinateLabel.center = CGPointMake(x, y);
+    CGSize citySize = CGSizeMake(0, snappedToBlueDot ? 0 : ceil(cityFont.lineHeight));
+    if (!cityLabel.hidden) {
+	citySize.width = [cityLabel sizeThatFits:CGSizeMake(CGFLOAT_MAX, CGFLOAT_MAX)].width;
+    }
+    CGFloat textWidth = fmax(coordinateSize.width, citySize.width);
+    CGFloat textHeight = coordinateSize.height + citySize.height;
+    textWidth = fmin(ceil(textWidth), self.bounds.size.width * LABEL_MAX_WIDTH - 2 * LABEL_PAD_X);
+    coordinateSize.width = fmin(coordinateSize.width, textWidth);
+    coordinateLabel.frame = CGRectMake(LABEL_PAD_X + floor((textWidth - coordinateSize.width) / 2), LABEL_PAD_Y, coordinateSize.width, coordinateSize.height);
+    cityLabel.frame = CGRectMake(LABEL_PAD_X, LABEL_PAD_Y + coordinateSize.height, textWidth, citySize.height);
+    CGSize plateSize = CGSizeMake(textWidth + 2 * LABEL_PAD_X, ceil(textHeight) + 2 * LABEL_PAD_Y);
+
+    // Always above the finger, which would hide it below; near the map's top edge it rises over the dimmed area.  Only
+    // if even that runs out of room (a very short window) does it come down, and then beside the finger, not under it.
+    CGFloat x = fmin(fmax(p.x, plateSize.width/2), self.bounds.size.width - plateSize.width/2);
+    CGFloat y = p.y - LABEL_GAP - plateSize.height/2;
+    UIView *container = self.superview;
+    if (container) {
+	CGFloat safeTop = [self convertPoint:CGPointMake(0, container.safeAreaInsets.top) fromView:container].y;
+	if (y - plateSize.height/2 < safeTop) {
+	    y = safeTop + plateSize.height/2;
+	    CGFloat clear = plateSize.width/2 + CURSOR_RADIUS + LABEL_PAD_X;  // the plate's center this far to one side
+	    x = p.x + clear <= self.bounds.size.width - plateSize.width/2 ? p.x + clear : p.x - clear;
+	}
+    }
+    labelPlate.bounds = CGRectMake(0, 0, plateSize.width, plateSize.height);
+    labelPlate.center = CGPointMake(x, y);
+    labelPlate.hidden = NO;
 }
 
 - (void)hideCursor {
     cursorLayer.hidden = YES;
-    coordinateLabel.hidden = YES;
+    labelPlate.hidden = YES;
 }
 
 - (void)hideCoordinateLabel {
-    coordinateLabel.hidden = YES;
+    labelPlate.hidden = YES;
 }
 
 - (bool)pointIsOnBlueDot:(CGPoint)p {
@@ -279,7 +453,13 @@ coordinateString(double latitudeDegrees, double longitudeDegrees) {
     [blueDotLayer release];
     [matLayer release];
     [borderLayer release];
+    [labelPlate release];
+    [cityLabel release];
     [coordinateLabel release];
+    [cityFont release];
+    [coordinateFont release];
+    [cityText release];
+    delete geoNames;
     [super dealloc];
 }
 
