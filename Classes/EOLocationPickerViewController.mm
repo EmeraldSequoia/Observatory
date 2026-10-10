@@ -18,6 +18,11 @@
 #define BLUE_DOT_HIT_RADIUS 22.0  // points; a touch starting this close to the blue dot snaps to it while it stays this close
 #define CURSOR_RADIUS        12.0
 #define LABEL_GAP            30.0  // between the finger and the label's nearer edge, so the finger doesn't hide it
+#define LOUPE_RADIUS         50.0
+#define LOUPE_GAP            12.0  // between the finger and the magnifier's nearer edge
+#define LOUPE_ANGLE          40.0  // degrees from straight up, toward the side the magnifier is on (right, unless no room)
+#define LOUPE_MAGNIFICATION  3.0
+#define LOUPE_LABEL_GAP      8.0   // between the magnifier and the label above it
 #define LABEL_PAD_X          18.0
 #define LABEL_PAD_Y          10.0
 #define LABEL_MAX_WIDTH      0.6   // of the map's width; a longer city name is truncated
@@ -145,6 +150,47 @@ textScale() {
 	cursorLayer.hidden = YES;
 	[self.layer addSublayer:cursorLayer];
 
+	// The magnifier:  a disc of the map, magnified, with its own dots and cursor, framed like the map
+	loupeLayer = [[CALayer alloc] init];
+	loupeLayer.bounds = CGRectMake(0, 0, 2 * LOUPE_RADIUS, 2 * LOUPE_RADIUS);
+	loupeLayer.shadowColor = [UIColor blackColor].CGColor;
+	loupeLayer.shadowOpacity = MAP_SHADOW_OPACITY;
+	loupeLayer.shadowRadius = 8;
+	loupeLayer.shadowOffset = CGSizeMake(0, 4);
+	loupeLayer.shadowPath = [UIBezierPath bezierPathWithOvalInRect:loupeLayer.bounds].CGPath;
+	loupeLayer.hidden = YES;
+	CALayer *loupeClipLayer = [CALayer layer];
+	loupeClipLayer.frame = loupeLayer.bounds;
+	loupeClipLayer.cornerRadius = LOUPE_RADIUS;
+	loupeClipLayer.masksToBounds = YES;
+	loupeClipLayer.backgroundColor = [UIColor blackColor].CGColor;  // past the map's edges
+	loupeClipLayer.borderColor = [UIColor colorWithWhite:BORDER_GRAY alpha:BORDER_ALPHA].CGColor;
+	loupeClipLayer.borderWidth = BORDER_LINE_WIDTH;
+	[loupeLayer addSublayer:loupeClipLayer];
+	loupeMapLayer = [[CALayer alloc] init];
+	loupeMapLayer.anchorPoint = CGPointZero;
+	[loupeClipLayer insertSublayer:loupeMapLayer atIndex:0];  // under the border
+	loupeRedDotLayer = [[CAShapeLayer alloc] init];
+	loupeRedDotLayer.fillColor = redDotLayer.fillColor;
+	loupeRedDotLayer.strokeColor = redDotLayer.strokeColor;
+	[loupeMapLayer addSublayer:loupeRedDotLayer];
+	loupeBlueDotLayer = [[CAShapeLayer alloc] init];
+	loupeBlueDotLayer.fillColor = blueDotLayer.fillColor;
+	loupeBlueDotLayer.strokeColor = blueDotLayer.strokeColor;
+	[loupeMapLayer addSublayer:loupeBlueDotLayer];
+	CAShapeLayer *loupeCursorLayer = [CAShapeLayer layer];
+	loupeCursorLayer.path = cursorLayer.path;
+	loupeCursorLayer.fillColor = cursorLayer.fillColor;
+	loupeCursorLayer.strokeColor = cursorLayer.strokeColor;
+	loupeCursorLayer.lineWidth = cursorLayer.lineWidth;
+	loupeCursorLayer.shadowColor = cursorLayer.shadowColor;
+	loupeCursorLayer.shadowOpacity = cursorLayer.shadowOpacity;
+	loupeCursorLayer.shadowRadius = cursorLayer.shadowRadius;
+	loupeCursorLayer.shadowOffset = cursorLayer.shadowOffset;
+	loupeCursorLayer.position = CGPointMake(LOUPE_RADIUS, LOUPE_RADIUS);
+	[loupeClipLayer addSublayer:loupeCursorLayer];
+	[self.layer addSublayer:loupeLayer];
+
 	labelPlate = [[UIView alloc] init];
 	labelPlate.backgroundColor = [UIColor colorWithWhite:0 alpha:0.7];
 	labelPlate.layer.cornerRadius = 10;
@@ -232,19 +278,49 @@ textScale() {
     blueDotLayer.path = [UIBezierPath bezierPathWithArcCenter:CGPointZero radius:1.25 * markScale startAngle:0 endAngle:2*M_PI clockwise:YES].CGPath;
     blueDotLayer.lineWidth = 0.5 * markScale;
     blueDotLayer.position = [self blueDotPoint];
+    // The magnifier's dots are the same, magnified with the map
+    loupeMapLayer.bounds = CGRectMake(0, 0, bounds.size.width * LOUPE_MAGNIFICATION, bounds.size.height * LOUPE_MAGNIFICATION);
+    CATransform3D magnify = CATransform3DMakeScale(LOUPE_MAGNIFICATION, LOUPE_MAGNIFICATION, 1);
+    for (CAShapeLayer *dot in @[ loupeRedDotLayer, loupeBlueDotLayer ]) {
+	CAShapeLayer *original = dot == loupeRedDotLayer ? redDotLayer : blueDotLayer;
+	dot.path = original.path;
+	dot.lineWidth = original.lineWidth;
+	dot.transform = magnify;
+	dot.position = CGPointMake(original.position.x * LOUPE_MAGNIFICATION, original.position.y * LOUPE_MAGNIFICATION);
+    }
+    loupeBlueDotLayer.hidden = !showBlueDot;
     [CATransaction commit];
 }
 
-- (void)drawRect:(CGRect)rect {
-    CGContextRef context = UIGraphicsGetCurrentContext();
-    CGSize size = self.bounds.size;
-    // As on the clock, where the small map sits over the city lights: the day/night shading erases the day image,
-    // so draw that in its own layer over the night image
-    [nightImg drawInRect:self.bounds];
+// As on the clock, where the small map sits over the city lights: the day/night shading erases the day image, so draw
+// that in its own layer over the night image
+- (void)drawMapInContext:(CGContextRef)context size:(CGSize)size markScale:(double)markScale {
+    [nightImg drawInRect:CGRectMake(0, 0, size.width, size.height)];
     CGContextBeginTransparencyLayer(context, NULL);
-    EODrawEarthMap(context, img, size.width, size.height, [self markScale], false/*drawLocation*/,
+    EODrawEarthMap(context, img, size.width, size.height, markScale, false/*drawLocation*/,
 		   [[EOClock theClock] time], [[EOClock theClock] env]);
     CGContextEndTransparencyLayer(context);
+}
+
+- (void)drawRect:(CGRect)rect {
+    [self drawMapInContext:UIGraphicsGetCurrentContext() size:self.bounds.size markScale:[self markScale]];
+}
+
+// The magnifier's map:  drawn once, at the image's own resolution, so moving the magnifier only moves a layer
+- (void)makeLoupeImage {
+    if (loupeImage || self.bounds.size.width <= 0) {
+	return;
+    }
+    CGSize size = img.size;
+    double markScale = [self markScale] * size.width / self.bounds.size.width;
+    UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat preferredFormat];
+    format.scale = 1;
+    format.opaque = YES;
+    UIGraphicsImageRenderer *renderer = [[[UIGraphicsImageRenderer alloc] initWithSize:size format:format] autorelease];
+    loupeImage = [[renderer imageWithActions:^(UIGraphicsImageRendererContext *rendererContext) {
+	[self drawMapInContext:rendererContext.CGContext size:size markScale:markScale];
+    }] retain];
+    loupeMapLayer.contents = (id)loupeImage.CGImage;
 }
 
 - (CGPoint)clampedPointForTouch:(UITouch *)touch {
@@ -371,31 +447,61 @@ textScale() {
     cityLabel.frame = CGRectMake(LABEL_PAD_X, LABEL_PAD_Y + coordinateSize.height, textWidth, citySize.height);
     CGSize plateSize = CGSizeMake(textWidth + 2 * LABEL_PAD_X, ceil(textHeight) + 2 * LABEL_PAD_Y);
 
-    // Always above the finger, which would hide it below; near the map's top edge it rises over the dimmed area.  Only
-    // if even that runs out of room (a very short window) does it come down, and then beside the finger, not under it.
-    CGFloat x = fmin(fmax(p.x, plateSize.width/2), self.bounds.size.width - plateSize.width/2);
-    CGFloat y = p.y - LABEL_GAP - plateSize.height/2;
+    // The magnifier above and to the side of the finger, which would hide it below, and the label above that; near the
+    // map's top edge they rise over the dimmed area.  Where that runs out of room, the magnifier comes down, sliding
+    // around the finger to stay as far from it; and the label slides aside to clear the finger too.
+    CGRect safe = self.bounds;
     UIView *container = self.superview;
     if (container) {
-	CGFloat safeTop = [self convertPoint:CGPointMake(0, container.safeAreaInsets.top) fromView:container].y;
-	if (y - plateSize.height/2 < safeTop) {
-	    y = safeTop + plateSize.height/2;
-	    CGFloat clear = plateSize.width/2 + CURSOR_RADIUS + LABEL_PAD_X;  // the plate's center this far to one side
-	    x = p.x + clear <= self.bounds.size.width - plateSize.width/2 ? p.x + clear : p.x - clear;
-	}
+	safe = [self convertRect:UIEdgeInsetsInsetRect(container.bounds, container.safeAreaInsets) fromView:container];
     }
+    CGFloat lift = LOUPE_GAP + LOUPE_RADIUS;  // from the finger to the magnifier's center
+    double angle = LOUPE_ANGLE * M_PI / 180;
+    CGFloat loupeY = fmax(p.y - lift * cos(angle), CGRectGetMinY(safe) + plateSize.height + LOUPE_LABEL_GAP + LOUPE_RADIUS);
+    CGFloat dy = p.y - loupeY;
+    CGFloat dx = dy >= lift * cos(angle) ? lift * sin(angle)
+	: dy > 0 ? sqrt(lift * lift - dy * dy) : lift;  // level with the finger or below, beside it
+    // Changing sides is a jump, so only when the side it's on has no room
+    if (loupeOnLeft ? p.x - dx < CGRectGetMinX(safe) + LOUPE_RADIUS : p.x + dx > CGRectGetMaxX(safe) - LOUPE_RADIUS) {
+	loupeOnLeft = !loupeOnLeft;
+    }
+    CGFloat side = loupeOnLeft ? -1 : 1;
+    CGFloat loupeX = p.x + side * dx;
+    loupeX = fmin(fmax(loupeX, CGRectGetMinX(safe) + LOUPE_RADIUS), CGRectGetMaxX(safe) - LOUPE_RADIUS);
+    CGFloat y = loupeY - LOUPE_RADIUS - LOUPE_LABEL_GAP - plateSize.height/2;
+    CGFloat x = loupeX;
+    // As the label comes down beside the finger, it slides aside (gradually, so it doesn't jump) to clear it
+    CGFloat overlap = (y + plateSize.height/2) - (p.y - LABEL_GAP);
+    CGFloat clear = fmin(fmax(overlap / plateSize.height, 0), 1) * (plateSize.width/2 + LABEL_GAP);
+    x = loupeOnLeft ? fmin(x, p.x - clear) : fmax(x, p.x + clear);
+    x = fmin(fmax(x, CGRectGetMinX(safe) + plateSize.width/2), CGRectGetMaxX(safe) - plateSize.width/2);
+
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    [self makeLoupeImage];
+    loupeMapLayer.position = CGPointMake(LOUPE_RADIUS - p.x * LOUPE_MAGNIFICATION, LOUPE_RADIUS - p.y * LOUPE_MAGNIFICATION);
+    loupeLayer.position = CGPointMake(loupeX, loupeY);
+    loupeLayer.hidden = NO;
+    [CATransaction commit];
     labelPlate.bounds = CGRectMake(0, 0, plateSize.width, plateSize.height);
     labelPlate.center = CGPointMake(x, y);
     labelPlate.hidden = NO;
 }
 
-- (void)hideCursor {
-    cursorLayer.hidden = YES;
+- (void)hideCoordinateLabel {
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    loupeLayer.hidden = YES;
+    [CATransaction commit];
     labelPlate.hidden = YES;
 }
 
-- (void)hideCoordinateLabel {
-    labelPlate.hidden = YES;
+- (void)hideCursor {
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    cursorLayer.hidden = YES;
+    [CATransaction commit];
+    [self hideCoordinateLabel];
 }
 
 - (bool)pointIsOnBlueDot:(CGPoint)p {
@@ -412,6 +518,7 @@ textScale() {
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     redDotLayer.hidden = !snappedToBlueDot;
+    loupeRedDotLayer.hidden = redDotLayer.hidden;
     [CATransaction commit];
     [self moveCursorToPoint:(snappedToBlueDot ? [self blueDotPoint] : p)];
 }
@@ -419,6 +526,7 @@ textScale() {
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     CGPoint p = [self clampedPointForTouch:[touches anyObject]];
     touchSnapsToBlueDot = [[EOClock theClock] env]->location()->isDeviceLocation() || [self pointIsOnBlueDot:p];
+    loupeOnLeft = false;
     [self trackTouchAtPoint:p];
 }
 
@@ -443,6 +551,7 @@ textScale() {
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     redDotLayer.hidden = NO;
+    loupeRedDotLayer.hidden = NO;
     [CATransaction commit];
 }
 
@@ -450,6 +559,11 @@ textScale() {
     [img release];
     [nightImg release];
     [cursorLayer release];
+    [loupeLayer release];
+    [loupeMapLayer release];
+    [loupeRedDotLayer release];
+    [loupeBlueDotLayer release];
+    [loupeImage release];
     [redDotLayer release];
     [blueDotLayer release];
     [matLayer release];

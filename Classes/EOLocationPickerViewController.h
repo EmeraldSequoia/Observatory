@@ -18,8 +18,10 @@ class ESGeoNames;
 
 // A large Earth map.  Touch and drag to move a cursor; lifting sets the location there.  A touch that starts on the
 // blue dot (the device's location), or any touch while the clock is on Location Services, snaps the cursor to the blue
-// dot whenever it is on it, and lifting there picks Location Services instead.  The red dot (the current location) hides while the cursor is moving it elsewhere.  A label
-// over the cursor names a nearby city in the time zone a lift would set, and gives the latitude and longitude.
+// dot whenever it is on it, and lifting there picks Location Services instead.  The red dot (the current location)
+// hides while the cursor is moving it elsewhere.  A magnifier above the finger shows the map under it, so the finger
+// hides nothing; and a label above that names a nearby city in the time zone a lift would set, and gives the latitude
+// and longitude.
 @interface EOLocationPickerMapView : UIView {
     id<EOLocationPickerMapViewDelegate> delegate;  // not retained
     UIImage             *img;
@@ -29,6 +31,12 @@ class ESGeoNames;
     CAShapeLayer        *blueDotLayer;
     CAShapeLayer        *matLayer;     // the black gap between the map and its border...
     CAShapeLayer        *borderLayer;  // ...and the border, like the clock's frame around the small map
+    CALayer             *loupeLayer;   // the magnifier, with its shadow...
+    CALayer             *loupeMapLayer;     // ...the whole map, magnified, placed so the cursor's point is at its center...
+    CAShapeLayer        *loupeRedDotLayer;  // ...with the dots on it
+    CAShapeLayer        *loupeBlueDotLayer;
+    UIImage             *loupeImage;   // the map as drawn, at the image's own resolution; made at the first touch
+    bool                loupeOnLeft;   // the side of the finger the magnifier is on, when it has to come down beside it
     UIView              *labelPlate;   // the dark rounded plate holding the two labels
     UILabel             *cityLabel;
     UILabel             *coordinateLabel;
