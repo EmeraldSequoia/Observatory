@@ -17,8 +17,8 @@ class ESGeoNames;
 @end
 
 // A large Earth map.  Touch and drag to move a cursor; lifting sets the location there.  A touch that starts on the
-// blue dot (the device's location) snaps the cursor to the blue dot whenever it is on it, and lifting there picks
-// Location Services instead.  The red dot (the current location) hides while the cursor is moving it elsewhere.  A label
+// blue dot (the device's location), or any touch while the clock is on Location Services, snaps the cursor to the blue
+// dot whenever it is on it, and lifting there picks Location Services instead.  The red dot (the current location) hides while the cursor is moving it elsewhere.  A label
 // over the cursor names a nearby city in the time zone a lift would set, and gives the latitude and longitude.
 @interface EOLocationPickerMapView : UIView {
     id<EOLocationPickerMapViewDelegate> delegate;  // not retained
@@ -45,7 +45,7 @@ class ESGeoNames;
     bool                showBlueDot;
     double              blueLatitudeDegrees;
     double              blueLongitudeDegrees;
-    bool                touchStartedOnBlueDot;
+    bool                touchSnapsToBlueDot;
     bool                snappedToBlueDot;
 }
 

@@ -403,11 +403,12 @@ textScale() {
     return showBlueDot && hypot(p.x - blue.x, p.y - blue.y) <= BLUE_DOT_HIT_RADIUS;
 }
 
-// Only a touch that started on the blue dot snaps to it, so one that started elsewhere can set the location right
-// next to the blue dot.  Such a touch snaps whenever it is on the blue dot, even after dragging away and back.
-// Otherwise the cursor stands for the new location, so the red dot hides.
+// A touch snaps to the blue dot if the clock is on Location Services (so a drag can come back home) or if it started on
+// the blue dot; otherwise a touch can set the location right next to the blue dot.  A touch that snaps does so whenever
+// it is on the blue dot, even after dragging away and back.  Otherwise the cursor stands for the new location, so the
+// red dot hides.
 - (void)trackTouchAtPoint:(CGPoint)p {
-    snappedToBlueDot = touchStartedOnBlueDot && [self pointIsOnBlueDot:p];
+    snappedToBlueDot = touchSnapsToBlueDot && [self pointIsOnBlueDot:p];
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     redDotLayer.hidden = !snappedToBlueDot;
@@ -417,7 +418,7 @@ textScale() {
 
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     CGPoint p = [self clampedPointForTouch:[touches anyObject]];
-    touchStartedOnBlueDot = [self pointIsOnBlueDot:p];
+    touchSnapsToBlueDot = [[EOClock theClock] env]->location()->isDeviceLocation() || [self pointIsOnBlueDot:p];
     [self trackTouchAtPoint:p];
 }
 
@@ -436,7 +437,7 @@ textScale() {
 }
 
 - (void)touchesCancelled:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
-    touchStartedOnBlueDot = false;
+    touchSnapsToBlueDot = false;
     snappedToBlueDot = false;
     [self hideCursor];
     [CATransaction begin];
