@@ -19,9 +19,10 @@ class ESGeoNames;
 // A large Earth map.  Touch and drag to move a cursor; lifting sets the location there.  A touch that starts on the
 // blue dot (the device's location), or any touch while the clock is on Location Services, snaps the cursor to the blue
 // dot whenever it is on it, and lifting there picks Location Services instead.  The red dot (the current location)
-// hides while the cursor is moving it elsewhere.  A magnifier above the finger shows the map under it, so the finger
-// hides nothing; and a label above that names a nearby city in the time zone a lift would set, and gives the latitude
-// and longitude.
+// hides while the cursor is moving it elsewhere.  A magnifier at the map's top center shows the map under the finger,
+// so the finger hides nothing; and a label above that names a nearby city in the time zone a lift would set, and gives
+// the latitude and longitude.  Between touches, they show the current location.  The map's frame and shadow go around
+// the magnifier and label too.
 @interface EOLocationPickerMapView : UIView {
     id<EOLocationPickerMapViewDelegate> delegate;  // not retained
     UIImage             *img;
@@ -35,9 +36,10 @@ class ESGeoNames;
     CALayer             *loupeMapLayer;     // ...the whole map, magnified, placed so the cursor's point is at its center...
     CAShapeLayer        *loupeRedDotLayer;  // ...with the dots on it
     CAShapeLayer        *loupeBlueDotLayer;
+    CAShapeLayer        *loupeCursorLayer;
     UIImage             *loupeImage;   // the map as drawn, at the image's own resolution; made at the first touch
-    bool                loupeOnLeft;   // the side of the finger the magnifier is on, when it has to come down beside it
-    UIView              *labelPlate;   // the dark rounded plate holding the two labels
+    bool                framed;        // the magnifier and label show, with the frame around them
+    UIView              *labelPlate;   // the black rounded plate holding the two labels
     UILabel             *cityLabel;
     UILabel             *coordinateLabel;
     UIFont              *cityFont;     // made as needed, at the current Dynamic Type size
@@ -55,13 +57,14 @@ class ESGeoNames;
     double              blueLongitudeDegrees;
     bool                touchSnapsToBlueDot;
     bool                snappedToBlueDot;
+    bool                ignoringTouch; // it started on the magnifier or label
 }
 
 @property (nonatomic, assign) id<EOLocationPickerMapViewDelegate> delegate;
 
 - (void)setBlueDotLatitude:(double)latitudeDegrees longitude:(double)longitudeDegrees;
 - (void)hideCursor;
-- (void)hideCoordinateLabel;
+- (void)setFramed:(bool)framed duration:(NSTimeInterval)duration;
 - (void)setBorderScale:(double)clockScale;  // points per clock canvas unit, so the border matches the clock's
 
 @end

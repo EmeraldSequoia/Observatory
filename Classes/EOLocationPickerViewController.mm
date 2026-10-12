@@ -17,15 +17,13 @@
 
 #define BLUE_DOT_HIT_RADIUS 22.0  // points; a touch starting this close to the blue dot snaps to it while it stays this close
 #define CURSOR_RADIUS        12.0
-#define LABEL_GAP            30.0  // between the finger and the label's nearer edge, so the finger doesn't hide it
 #define LOUPE_RADIUS         50.0
-#define LOUPE_GAP            12.0  // between the finger and the magnifier's nearer edge
-#define LOUPE_ANGLE          40.0  // degrees from straight up, toward the side the magnifier is on (right, unless no room)
 #define LOUPE_MAGNIFICATION  3.0
-#define LOUPE_LABEL_GAP      8.0   // between the magnifier and the label above it
+#define LOUPE_MAP_OVERLAP    15.0  // how far the magnifier comes down over the map's top edge...
+#define LOUPE_LABEL_OVERLAP  8.0   // ...and up over the label's bottom edge (no farther than LABEL_PAD_Y, to miss the text)
 #define LABEL_PAD_X          18.0
 #define LABEL_PAD_Y          10.0
-#define LABEL_MAX_WIDTH      0.6   // of the map's width; a longer city name is truncated
+#define LABEL_CORNER_RADIUS  10.0
 #define CITY_MAX_KM          200   // the label names no city when the nearest is farther than this (out at sea)
 #define CITY_MIN_POPULATION  10000 // smaller places are too many:  the name would change with every small move
 #define CITY_STICKINESS      1.5   // the city named stays until another one is this much better a match
@@ -86,6 +84,11 @@ cityString(ESGeoNames *geoNames, double latitudeDegrees, double longitudeDegrees
 	return city;
     }
     return [NSString stringWithFormat:NSLocalizedString(@"%@, %@", @"nearest city on the location picker map: city, country"), city, country];
+}
+
+static NSString *
+locationServicesString() {
+    return NSLocalizedString(@"Location Services", @"label shown while touching the blue dot on the location picker map");
 }
 
 // Dynamic Type scale for the label's fonts
@@ -150,14 +153,9 @@ textScale() {
 	cursorLayer.hidden = YES;
 	[self.layer addSublayer:cursorLayer];
 
-	// The magnifier:  a disc of the map, magnified, with its own dots and cursor, framed like the map
+	// The magnifier:  a disc of the map, magnified, with its own dots and cursor, and a rim where it overlaps the map
 	loupeLayer = [[CALayer alloc] init];
 	loupeLayer.bounds = CGRectMake(0, 0, 2 * LOUPE_RADIUS, 2 * LOUPE_RADIUS);
-	loupeLayer.shadowColor = [UIColor blackColor].CGColor;
-	loupeLayer.shadowOpacity = MAP_SHADOW_OPACITY;
-	loupeLayer.shadowRadius = 8;
-	loupeLayer.shadowOffset = CGSizeMake(0, 4);
-	loupeLayer.shadowPath = [UIBezierPath bezierPathWithOvalInRect:loupeLayer.bounds].CGPath;
 	loupeLayer.hidden = YES;
 	CALayer *loupeClipLayer = [CALayer layer];
 	loupeClipLayer.frame = loupeLayer.bounds;
@@ -178,7 +176,7 @@ textScale() {
 	loupeBlueDotLayer.fillColor = blueDotLayer.fillColor;
 	loupeBlueDotLayer.strokeColor = blueDotLayer.strokeColor;
 	[loupeMapLayer addSublayer:loupeBlueDotLayer];
-	CAShapeLayer *loupeCursorLayer = [CAShapeLayer layer];
+	loupeCursorLayer = [[CAShapeLayer alloc] init];
 	loupeCursorLayer.path = cursorLayer.path;
 	loupeCursorLayer.fillColor = cursorLayer.fillColor;
 	loupeCursorLayer.strokeColor = cursorLayer.strokeColor;
@@ -188,14 +186,12 @@ textScale() {
 	loupeCursorLayer.shadowRadius = cursorLayer.shadowRadius;
 	loupeCursorLayer.shadowOffset = cursorLayer.shadowOffset;
 	loupeCursorLayer.position = CGPointMake(LOUPE_RADIUS, LOUPE_RADIUS);
+	loupeCursorLayer.hidden = YES;
 	[loupeClipLayer addSublayer:loupeCursorLayer];
-	[self.layer addSublayer:loupeLayer];
 
 	labelPlate = [[UIView alloc] init];
-	labelPlate.backgroundColor = [UIColor colorWithWhite:0 alpha:0.7];
-	labelPlate.layer.cornerRadius = 10;
-	labelPlate.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.15].CGColor;  // a hairline, echoing the map's border
-	labelPlate.layer.borderWidth = 1 / [UIScreen mainScreen].scale;
+	labelPlate.backgroundColor = [UIColor blackColor];
+	labelPlate.layer.cornerRadius = LABEL_CORNER_RADIUS;
 	labelPlate.userInteractionEnabled = NO;
 	labelPlate.hidden = YES;
 	[self addSubview:labelPlate];
@@ -208,6 +204,7 @@ textScale() {
 	coordinateLabel.textAlignment = NSTextAlignmentCenter;
 	coordinateLabel.lineBreakMode = NSLineBreakByTruncatingTail;
 	[labelPlate addSubview:coordinateLabel];
+	[self.layer addSublayer:loupeLayer];  // over the label's bottom edge
 
 	[self registerForTraitChanges:@[ [UITraitPreferredContentSizeCategory class] ] withAction:@selector(contentSizeCategoryChanged)];
 
@@ -264,10 +261,31 @@ textScale() {
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     CGRect bounds = self.bounds;
-    matLayer.path = [UIBezierPath bezierPathWithRect:CGRectInset(bounds, -matLayer.lineWidth / 2, -matLayer.lineWidth / 2)].CGPath;
-    double borderInset = -(matLayer.lineWidth + borderLayer.lineWidth / 2);
-    borderLayer.path = [UIBezierPath bezierPathWithRect:CGRectInset(bounds, borderInset, borderInset)].CGPath;
-    self.layer.shadowPath = [UIBezierPath bezierPathWithRect:CGRectInset(bounds, -[self borderOutset], -[self borderOutset])].CGPath;
+
+    // The magnifier at the map's top center, over its top edge, and the label above it, over the dimmed area where the
+    // finger isn't.  Where there isn't room above the map for both (a phone in landscape), they come down over it.  The
+    // label has a fixed size, as wide as the coordinates or "Location Services", with room for the city line below.
+    [self makeFonts];
+    CGFloat textWidth = ceil(fmax(coordinatesWidth + 2, [locationServicesString() sizeWithAttributes:@{ NSFontAttributeName : coordinateFont }].width));
+    CGSize plateSize = CGSizeMake(textWidth + 2 * LABEL_PAD_X, ceil(coordinateFont.lineHeight) + ceil(cityFont.lineHeight) + 2 * LABEL_PAD_Y);
+    CGRect safe = bounds;
+    UIView *container = self.superview;
+    if (container) {
+	safe = [self convertRect:UIEdgeInsetsInsetRect(container.bounds, container.safeAreaInsets) fromView:container];
+    }
+    CGFloat x = CGRectGetMidX(bounds);
+    CGFloat loupeY = -[self borderOutset] + LOUPE_MAP_OVERLAP - LOUPE_RADIUS;
+    CGFloat plateBottom = loupeY - LOUPE_RADIUS + LOUPE_LABEL_OVERLAP;
+    CGFloat down = fmax(CGRectGetMinY(safe) - (plateBottom - plateSize.height), 0);
+    loupeLayer.position = CGPointMake(x, loupeY + down);
+    loupeLayer.hidden = !framed;
+    labelPlate.frame = CGRectMake(x - plateSize.width / 2, plateBottom + down - plateSize.height, plateSize.width, plateSize.height);
+    labelPlate.hidden = !framed;
+
+    // The frame goes around all three, as one
+    matLayer.path = [self framePathOutset:matLayer.lineWidth / 2].CGPath;
+    borderLayer.path = [self framePathOutset:matLayer.lineWidth + borderLayer.lineWidth / 2].CGPath;
+    self.layer.shadowPath = [self framePathOutset:[self borderOutset]].CGPath;
     blueDotLayer.hidden = !showBlueDot;
     double markScale = [self markScale];
     ESLocation *location = [[EOClock theClock] env]->location();
@@ -290,6 +308,59 @@ textScale() {
     }
     loupeBlueDotLayer.hidden = !showBlueDot;
     [CATransaction commit];
+    if (cursorLayer.hidden) {
+	[self showCurrentLocation];
+    }
+}
+
+// The outline of the map, with the magnifier and label when they show, the given distance outside them
+- (UIBezierPath *)framePathOutset:(CGFloat)outset {
+    UIBezierPath *path = [UIBezierPath bezierPathWithRect:CGRectInset(self.bounds, -outset, -outset)];
+    if (!framed) {
+	return path;
+    }
+    UIBezierPath *loupe = [UIBezierPath bezierPathWithOvalInRect:CGRectInset(loupeLayer.frame, -outset, -outset)];
+    UIBezierPath *plate = [UIBezierPath bezierPathWithRoundedRect:CGRectInset(labelPlate.frame, -outset, -outset) cornerRadius:LABEL_CORNER_RADIUS + outset];
+    CGPathRef withLoupe = CGPathCreateCopyByUnioningPath(path.CGPath, loupe.CGPath, false);
+    CGPathRef withPlate = CGPathCreateCopyByUnioningPath(withLoupe, plate.CGPath, false);
+    path = [UIBezierPath bezierPathWithCGPath:withPlate];
+    CGPathRelease(withLoupe);
+    CGPathRelease(withPlate);
+    return path;
+}
+
+// Shows or hides the magnifier and label, and the frame around them, fading over the given time
+- (void)setFramed:(bool)newFramed duration:(NSTimeInterval)duration {
+    if (newFramed == framed) {
+	return;
+    }
+    void (^change)(void) = ^{
+	framed = newFramed;
+	if (framed) {
+	    [self makeLoupeImage];
+	}
+	[self setNeedsLayout];
+	[self layoutIfNeeded];
+    };
+    if (duration > 0) {
+	[UIView transitionWithView:self duration:duration options:UIViewAnimationOptionTransitionCrossDissolve animations:change completion:NULL];
+    } else {
+	change();
+    }
+}
+
+- (bool)pointIsOnLoupeOrLabel:(CGPoint)p {
+    if (!framed) {
+	return false;
+    }
+    CGRect loupe = loupeLayer.frame;
+    return hypot(p.x - CGRectGetMidX(loupe), p.y - CGRectGetMidY(loupe)) <= LOUPE_RADIUS || CGRectContainsPoint(labelPlate.frame, p);
+}
+
+// The magnifier and label are part of the map's frame, so touching them doesn't close the picker as the dimmed area
+// around it does (but doesn't move the cursor either)
+- (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
+    return [super pointInside:point withEvent:event] || [self pointIsOnLoupeOrLabel:point];
 }
 
 // As on the clock, where the small map sits over the city lights: the day/night shading erases the day image, so draw
@@ -377,9 +448,9 @@ textScale() {
 }
 
 // The coordinates, with their tab stops; or "Location Services", centered
-- (NSAttributedString *)coordinateText:(NSString *)text {
+- (NSAttributedString *)coordinateText:(NSString *)text centered:(bool)centered {
     NSMutableParagraphStyle *style = [[[NSMutableParagraphStyle alloc] init] autorelease];
-    if (snappedToBlueDot) {
+    if (centered) {
 	style.alignment = NSTextAlignmentCenter;
     } else {
 	style.alignment = NSTextAlignmentLeft;
@@ -394,12 +465,55 @@ textScale() {
 	NSParagraphStyleAttributeName : style }] autorelease];
 }
 
-// Remakes the fonts at the new Dynamic Type size
+// Remakes the fonts, and so the label, at the new Dynamic Type size
 - (void)contentSizeCategoryChanged {
     [cityFont release];
     cityFont = nil;
     [coordinateFont release];
     coordinateFont = nil;
+    [self setNeedsLayout];
+}
+
+// The label shows the coordinates above the city, or "Location Services" alone; and the magnifier the map around them
+- (void)showLatitude:(double)latitudeDegrees longitude:(double)longitudeDegrees locationServices:(bool)locationServices {
+    [self makeFonts];
+    NSString *city = nil;
+    if (locationServices) {
+	coordinateLabel.attributedText = [self coordinateText:locationServicesString() centered:true];
+    } else {
+	[self updateCityForLatitude:latitudeDegrees longitude:longitudeDegrees];
+	coordinateLabel.attributedText = [self coordinateText:coordinateString(latitudeDegrees, longitudeDegrees) centered:false];
+	city = cityText;
+    }
+    cityLabel.hidden = city == nil;
+    cityLabel.font = cityFont;
+    cityLabel.text = city;
+
+    // The coordinate line has a fixed width, centered on the plate, with room below for the city line whether or not
+    // there is one, so the coordinates don't jump up and down as a city comes and goes; but "Location Services" is
+    // alone, in the middle.
+    CGSize plateSize = labelPlate.bounds.size;
+    CGFloat textWidth = plateSize.width - 2 * LABEL_PAD_X;
+    CGFloat coordinateHeight = ceil(coordinateFont.lineHeight);
+    if (locationServices) {
+	coordinateLabel.frame = CGRectMake(LABEL_PAD_X, floor((plateSize.height - coordinateHeight) / 2), textWidth, coordinateHeight);
+    } else {
+	CGFloat coordinateWidth = fmin(coordinatesWidth + 2, textWidth);  // a little slack, so the line never truncates
+	coordinateLabel.frame = CGRectMake(LABEL_PAD_X + floor((textWidth - coordinateWidth) / 2), LABEL_PAD_Y, coordinateWidth, coordinateHeight);
+    }
+    cityLabel.frame = CGRectMake(LABEL_PAD_X, LABEL_PAD_Y + coordinateHeight, textWidth, ceil(cityFont.lineHeight));
+
+    CGPoint p = [self pointForLatitude:latitudeDegrees longitude:longitudeDegrees];
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    loupeMapLayer.position = CGPointMake(LOUPE_RADIUS - p.x * LOUPE_MAGNIFICATION, LOUPE_RADIUS - p.y * LOUPE_MAGNIFICATION);
+    [CATransaction commit];
+}
+
+// Between touches, the magnifier and label show the current location
+- (void)showCurrentLocation {
+    ESLocation *location = [[EOClock theClock] env]->location();
+    [self showLatitude:location->latitudeDegrees() longitude:location->longitudeDegrees() locationServices:location->isDeviceLocation()];
 }
 
 - (void)moveCursorToPoint:(CGPoint)p {
@@ -407,101 +521,18 @@ textScale() {
     [CATransaction setDisableActions:YES];
     cursorLayer.hidden = NO;
     cursorLayer.position = p;
+    loupeCursorLayer.hidden = NO;
     [CATransaction commit];
-
-    // The coordinates above the city; "Location Services" alone on the blue dot
-    [self makeFonts];
-    NSAttributedString *coordinates;
-    NSString *city;
-    if (snappedToBlueDot) {
-	coordinates = [self coordinateText:NSLocalizedString(@"Location Services", @"label shown while touching the blue dot on the location picker map")];
-	city = nil;
-    } else {
-	double latitudeDegrees = [self latitudeForPoint:p];
-	double longitudeDegrees = [self longitudeForPoint:p];
-	[self updateCityForLatitude:latitudeDegrees longitude:longitudeDegrees];
-	coordinates = [self coordinateText:coordinateString(latitudeDegrees, longitudeDegrees)];
-	city = cityText;
-    }
-    coordinateLabel.attributedText = coordinates;
-    cityLabel.hidden = city == nil;
-    cityLabel.font = cityFont;
-    cityLabel.text = city;
-
-    // The coordinate line has a fixed width, centered on the plate, so the plate only changes width for a wider city
-    // name.  It always has room for the city line, so the coordinates don't jump up and down as a city comes and goes;
-    // but "Location Services" is alone on the plate.
-    CGSize coordinateSize = [coordinateLabel sizeThatFits:CGSizeMake(CGFLOAT_MAX, CGFLOAT_MAX)];
-    if (!snappedToBlueDot) {
-	coordinateSize.width = coordinatesWidth + 2;  // a little slack, so the line never truncates
-    }
-    CGSize citySize = CGSizeMake(0, snappedToBlueDot ? 0 : ceil(cityFont.lineHeight));
-    if (!cityLabel.hidden) {
-	citySize.width = [cityLabel sizeThatFits:CGSizeMake(CGFLOAT_MAX, CGFLOAT_MAX)].width;
-    }
-    CGFloat textWidth = fmax(coordinateSize.width, citySize.width);
-    CGFloat textHeight = coordinateSize.height + citySize.height;
-    textWidth = fmin(ceil(textWidth), self.bounds.size.width * LABEL_MAX_WIDTH - 2 * LABEL_PAD_X);
-    coordinateSize.width = fmin(coordinateSize.width, textWidth);
-    coordinateLabel.frame = CGRectMake(LABEL_PAD_X + floor((textWidth - coordinateSize.width) / 2), LABEL_PAD_Y, coordinateSize.width, coordinateSize.height);
-    cityLabel.frame = CGRectMake(LABEL_PAD_X, LABEL_PAD_Y + coordinateSize.height, textWidth, citySize.height);
-    CGSize plateSize = CGSizeMake(textWidth + 2 * LABEL_PAD_X, ceil(textHeight) + 2 * LABEL_PAD_Y);
-
-    // The magnifier above and to the side of the finger, which would hide it below, and the label above that; near the
-    // map's top edge they rise over the dimmed area.  Where that runs out of room, the magnifier comes down, sliding
-    // around the finger to stay as far from it; and the label slides aside to clear the finger too.
-    CGRect safe = self.bounds;
-    UIView *container = self.superview;
-    if (container) {
-	safe = [self convertRect:UIEdgeInsetsInsetRect(container.bounds, container.safeAreaInsets) fromView:container];
-    }
-    CGFloat lift = LOUPE_GAP + LOUPE_RADIUS;  // from the finger to the magnifier's center
-    double angle = LOUPE_ANGLE * M_PI / 180;
-    CGFloat loupeY = fmax(p.y - lift * cos(angle), CGRectGetMinY(safe) + plateSize.height + LOUPE_LABEL_GAP + LOUPE_RADIUS);
-    CGFloat dy = p.y - loupeY;
-    CGFloat dx = dy >= lift * cos(angle) ? lift * sin(angle)
-	: dy > 0 ? sqrt(lift * lift - dy * dy) : lift;  // level with the finger or below, beside it
-    // Changing sides is a jump, so only when the side it's on has no room
-    if (loupeOnLeft ? p.x - dx < CGRectGetMinX(safe) + LOUPE_RADIUS : p.x + dx > CGRectGetMaxX(safe) - LOUPE_RADIUS) {
-	loupeOnLeft = !loupeOnLeft;
-    }
-    CGFloat side = loupeOnLeft ? -1 : 1;
-    CGFloat loupeX = p.x + side * dx;
-    loupeX = fmin(fmax(loupeX, CGRectGetMinX(safe) + LOUPE_RADIUS), CGRectGetMaxX(safe) - LOUPE_RADIUS);
-    CGFloat y = loupeY - LOUPE_RADIUS - LOUPE_LABEL_GAP - plateSize.height/2;
-    CGFloat x = loupeX;
-    // As the label comes down beside the finger, it slides aside (gradually, so it doesn't jump) to clear it
-    CGFloat overlap = (y + plateSize.height/2) - (p.y - LABEL_GAP);
-    CGFloat clear = fmin(fmax(overlap / plateSize.height, 0), 1) * (plateSize.width/2 + LABEL_GAP);
-    x = loupeOnLeft ? fmin(x, p.x - clear) : fmax(x, p.x + clear);
-    x = fmin(fmax(x, CGRectGetMinX(safe) + plateSize.width/2), CGRectGetMaxX(safe) - plateSize.width/2);
-
-    [CATransaction begin];
-    [CATransaction setDisableActions:YES];
-    [self makeLoupeImage];
-    loupeMapLayer.position = CGPointMake(LOUPE_RADIUS - p.x * LOUPE_MAGNIFICATION, LOUPE_RADIUS - p.y * LOUPE_MAGNIFICATION);
-    loupeLayer.position = CGPointMake(loupeX, loupeY);
-    loupeLayer.hidden = NO;
-    [CATransaction commit];
-    labelPlate.bounds = CGRectMake(0, 0, plateSize.width, plateSize.height);
-    labelPlate.center = CGPointMake(x, y);
-    labelPlate.hidden = NO;
-}
-
-- (void)hideCoordinateLabel {
-    [CATransaction begin];
-    [CATransaction setDisableActions:YES];
-    loupeLayer.hidden = YES;
-    [CATransaction commit];
-    labelPlate.hidden = YES;
+    [self showLatitude:[self latitudeForPoint:p] longitude:[self longitudeForPoint:p] locationServices:snappedToBlueDot];
 }
 
 - (void)hideCursor {
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     cursorLayer.hidden = YES;
+    loupeCursorLayer.hidden = YES;
     [CATransaction commit];
-    [self hideCoordinateLabel];
+    [self showCurrentLocation];
 }
 
 - (bool)pointIsOnBlueDot:(CGPoint)p {
@@ -524,17 +555,27 @@ textScale() {
 }
 
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    ignoringTouch = [self pointIsOnLoupeOrLabel:[[touches anyObject] locationInView:self]];
+    if (ignoringTouch) {
+	return;
+    }
     CGPoint p = [self clampedPointForTouch:[touches anyObject]];
     touchSnapsToBlueDot = [[EOClock theClock] env]->location()->isDeviceLocation() || [self pointIsOnBlueDot:p];
-    loupeOnLeft = false;
     [self trackTouchAtPoint:p];
 }
 
 - (void)touchesMoved:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    if (ignoringTouch) {
+	return;
+    }
     [self trackTouchAtPoint:[self clampedPointForTouch:[touches anyObject]]];
 }
 
 - (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    if (ignoringTouch) {
+	ignoringTouch = false;
+	return;
+    }
     CGPoint p = [self clampedPointForTouch:[touches anyObject]];
     [self trackTouchAtPoint:p];
     if (snappedToBlueDot) {
@@ -545,6 +586,10 @@ textScale() {
 }
 
 - (void)touchesCancelled:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    if (ignoringTouch) {
+	ignoringTouch = false;
+	return;
+    }
     touchSnapsToBlueDot = false;
     snappedToBlueDot = false;
     [self hideCursor];
@@ -563,6 +608,7 @@ textScale() {
     [loupeMapLayer release];
     [loupeRedDotLayer release];
     [loupeBlueDotLayer release];
+    [loupeCursorLayer release];
     [loupeImage release];
     [redDotLayer release];
     [blueDotLayer release];
@@ -740,6 +786,10 @@ dimColor() {
     return CGAffineTransformScale(t, source.size.width / map.size.width, source.size.height / map.size.height);
 }
 
+- (void)showMapFrame {
+    [mapView setFramed:true duration:FADE_DURATION];
+}
+
 - (void)animateShadowOpacityTo:(float)opacity duration:(NSTimeInterval)duration {
     CABasicAnimation *fade = [CABasicAnimation animationWithKeyPath:@"shadowOpacity"];
     fade.fromValue = @(mapView.layer.presentationLayer ? mapView.layer.presentationLayer.shadowOpacity : mapView.layer.shadowOpacity);
@@ -759,6 +809,7 @@ dimColor() {
 	[toView layoutIfNeeded];
 	closeButton.alpha = 0;
 	if (![self zooms]) {
+	    [mapView setFramed:true duration:0];
 	    toView.alpha = 0;
 	    [UIView animateWithDuration:duration animations:^{
 		toView.alpha = 1;
@@ -780,15 +831,16 @@ dimColor() {
 	} completion:^(BOOL finished) {
 	    [context completeTransition:!context.transitionWasCancelled];
 	}];
-	// Then the close button, once the map has nearly arrived
+	// Then the close button, the magnifier and the label, once the map has nearly arrived
+	[self performSelector:@selector(showMapFrame) withObject:nil afterDelay:duration * 0.6
+		   inModes:@[ NSRunLoopCommonModes ]];  // even if a touch has already started
 	[UIView animateWithDuration:FADE_DURATION delay:duration * 0.6 options:0 animations:^{
 	    closeButton.alpha = 1;
 	} completion:NULL];
     } else {
 	UIView *fromView = [context viewForKey:UITransitionContextFromViewKey];
-	if (pickedLocation) {
-	    [mapView hideCoordinateLabel];
-	} else {
+	[NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(showMapFrame) object:nil];
+	if (!pickedLocation) {
 	    [mapView hideCursor];
 	}
 	if (![self zooms]) {
@@ -804,6 +856,7 @@ dimColor() {
 	[UIView animateWithDuration:FADE_DURATION * 0.6 animations:^{
 	    closeButton.alpha = 0;
 	}];
+	[mapView setFramed:false duration:FADE_DURATION * 0.6];  // the small map has no magnifier or label to land in
 	[self animateShadowOpacityTo:0 duration:duration];
 	[UIView animateWithDuration:duration delay:0 usingSpringWithDamping:1 initialSpringVelocity:0 options:0 animations:^{
 	    mapView.transform = [self transformToSourceView];
