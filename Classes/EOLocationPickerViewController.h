@@ -39,6 +39,7 @@ class ESGeoNames;
     CAShapeLayer        *loupeCursorLayer;
     UIImage             *loupeImage;   // the map as drawn, at the image's own resolution; made at the first touch
     bool                framed;        // the magnifier and label show, with the frame around them
+    bool                fadingOut;     // not framed, but the magnifier and label still show, fading
     UIView              *labelPlate;   // the black rounded plate holding the two labels
     UILabel             *cityLabel;
     UILabel             *coordinateLabel;
@@ -65,6 +66,7 @@ class ESGeoNames;
 - (void)setBlueDotLatitude:(double)latitudeDegrees longitude:(double)longitudeDegrees;
 - (void)hideCursor;
 - (void)setFramed:(bool)framed duration:(NSTimeInterval)duration;
+- (void)fadeOutFrame:(float)opacity;
 - (void)setBorderScale:(double)clockScale;  // points per clock canvas unit, so the border matches the clock's
 
 @end
@@ -79,6 +81,9 @@ class ESGeoNames;
     bool                picked;
     bool                pickedLocation;  // the cursor rides the map back down, landing where the red dot will be
     bool                presenting;      // which way the transition being animated goes
+    CADisplayLink       *shrinkLink;     // fades the magnifier and label as the map shrinks back into the clock
+    double              shrinkStartScale;
+    double              shrinkEndScale;
 }
 
 @property (nonatomic, assign) UIView *sourceView;  // an EOEarthView

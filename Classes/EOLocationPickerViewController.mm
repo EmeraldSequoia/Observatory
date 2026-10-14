@@ -271,16 +271,19 @@ textScale() {
     CGRect safe = bounds;
     UIView *container = self.superview;
     if (container) {
-	safe = [self convertRect:UIEdgeInsetsInsetRect(container.bounds, container.safeAreaInsets) fromView:container];
+	// Without the zoom's transform, so a layout partway through it puts them where they'll be once it's done
+	CGPoint center = self.center;
+	safe = CGRectOffset(UIEdgeInsetsInsetRect(container.bounds, container.safeAreaInsets),
+			    bounds.size.width / 2 - center.x, bounds.size.height / 2 - center.y);
     }
     CGFloat x = CGRectGetMidX(bounds);
     CGFloat loupeY = -[self borderOutset] + LOUPE_MAP_OVERLAP - LOUPE_RADIUS;
     CGFloat plateBottom = loupeY - LOUPE_RADIUS + LOUPE_LABEL_OVERLAP;
     CGFloat down = fmax(CGRectGetMinY(safe) - (plateBottom - plateSize.height), 0);
     loupeLayer.position = CGPointMake(x, loupeY + down);
-    loupeLayer.hidden = !framed;
+    loupeLayer.hidden = !framed && !fadingOut;
     labelPlate.frame = CGRectMake(x - plateSize.width / 2, plateBottom + down - plateSize.height, plateSize.width, plateSize.height);
-    labelPlate.hidden = !framed;
+    labelPlate.hidden = !framed && !fadingOut;
 
     // The frame goes around all three, as one
     matLayer.path = [self framePathOutset:matLayer.lineWidth / 2].CGPath;
@@ -336,8 +339,11 @@ textScale() {
     }
     void (^change)(void) = ^{
 	framed = newFramed;
+	fadingOut = false;
 	if (framed) {
 	    [self makeLoupeImage];
+	    loupeLayer.opacity = 1;
+	    labelPlate.alpha = 1;
 	}
 	[self setNeedsLayout];
 	[self layoutIfNeeded];
@@ -347,6 +353,22 @@ textScale() {
     } else {
 	change();
     }
+}
+
+// Partway through hiding the magnifier and label:  the frame is the map's alone, and they show at the given opacity
+- (void)fadeOutFrame:(float)opacity {
+    if (!framed && !fadingOut) {
+	return;
+    }
+    framed = false;
+    fadingOut = opacity > 0;
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    loupeLayer.opacity = opacity;
+    labelPlate.alpha = opacity;
+    [self setNeedsLayout];
+    [self layoutIfNeeded];
+    [CATransaction commit];
 }
 
 - (bool)pointIsOnLoupeOrLabel:(CGPoint)p {
@@ -786,8 +808,19 @@ dimColor() {
     return CGAffineTransformScale(t, source.size.width / map.size.width, source.size.height / map.size.height);
 }
 
-- (void)showMapFrame {
-    [mapView setFramed:true duration:FADE_DURATION];
+// The magnifier and label fade out over the second half of the map's shrinking, by how far it has shrunk rather than
+// by time, since the spring covers most of the distance early
+- (void)shrinkStep {
+    CALayer *layer = mapView.layer.presentationLayer;
+    if (!layer) {
+	return;
+    }
+    double distance = shrinkStartScale - shrinkEndScale;
+    double progress = distance > 0 ? (shrinkStartScale - layer.transform.m11) / distance : 1;
+    float opacity = fmin(fmax(2 * (1 - progress), 0), 1);
+    if (opacity < 1) {
+	[mapView fadeOutFrame:opacity];
+    }
 }
 
 - (void)animateShadowOpacityTo:(float)opacity duration:(NSTimeInterval)duration {
@@ -819,7 +852,8 @@ dimColor() {
 	    }];
 	    return;
 	}
-	// The map itself lifts out of the clock (leaving its place empty), swells to full size, and casts a shadow
+	// The map itself lifts out of the clock (leaving its place empty), swells to full size, and casts a shadow; its
+	// magnifier and label fade in over the first third of that
 	sourceView.hidden = YES;
 	self.view.backgroundColor = [UIColor clearColor];
 	mapView.transform = [self transformToSourceView];
@@ -831,15 +865,13 @@ dimColor() {
 	} completion:^(BOOL finished) {
 	    [context completeTransition:!context.transitionWasCancelled];
 	}];
-	// Then the close button, the magnifier and the label, once the map has nearly arrived
-	[self performSelector:@selector(showMapFrame) withObject:nil afterDelay:duration * 0.6
-		   inModes:@[ NSRunLoopCommonModes ]];  // even if a touch has already started
+	[mapView setFramed:true duration:duration / 3];
+	// Then the close button, once the map has nearly arrived
 	[UIView animateWithDuration:FADE_DURATION delay:duration * 0.6 options:0 animations:^{
 	    closeButton.alpha = 1;
 	} completion:NULL];
     } else {
 	UIView *fromView = [context viewForKey:UITransitionContextFromViewKey];
-	[NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(showMapFrame) object:nil];
 	if (!pickedLocation) {
 	    [mapView hideCursor];
 	}
@@ -856,12 +888,20 @@ dimColor() {
 	[UIView animateWithDuration:FADE_DURATION * 0.6 animations:^{
 	    closeButton.alpha = 0;
 	}];
-	[mapView setFramed:false duration:FADE_DURATION * 0.6];  // the small map has no magnifier or label to land in
+	// The small map has no magnifier or label to land in, so they fade out on the way
+	CALayer *layer = mapView.layer.presentationLayer ? mapView.layer.presentationLayer : mapView.layer;
+	shrinkStartScale = layer.transform.m11;
+	shrinkEndScale = [self transformToSourceView].a;
+	shrinkLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(shrinkStep)];
+	[shrinkLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
 	[self animateShadowOpacityTo:0 duration:duration];
 	[UIView animateWithDuration:duration delay:0 usingSpringWithDamping:1 initialSpringVelocity:0 options:0 animations:^{
 	    mapView.transform = [self transformToSourceView];
 	    self.view.backgroundColor = [UIColor clearColor];
 	} completion:^(BOOL finished) {
+	    [shrinkLink invalidate];  // it retains self until then
+	    shrinkLink = nil;
+	    [mapView fadeOutFrame:0];
 	    sourceView.hidden = NO;  // the small map takes over exactly where the large one landed
 	    [fromView removeFromSuperview];
 	    [context completeTransition:!context.transitionWasCancelled];
