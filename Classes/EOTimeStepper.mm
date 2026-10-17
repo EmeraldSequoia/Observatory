@@ -104,6 +104,36 @@ static const int numBodies = sizeof(bodyPlanets) / sizeof(bodyPlanets[0]);
     }
 }
 
++ (NSString *)dialLabelForUnit:(EOTimeStepUnit)aUnit {
+    switch (aUnit) {
+      case EOTimeStepCentury:
+        return NSLocalizedString(@"Century", @"mode dial: step by a century");
+      case EOTimeStepYear:
+        return NSLocalizedString(@"Year", @"mode dial: step by a year");
+      case EOTimeStepMonth:
+        return NSLocalizedString(@"Month", @"mode dial: step by a month");
+      case EOTimeStepDay:
+        return NSLocalizedString(@"Day", @"mode dial: step by a day");
+      case EOTimeStepHour:
+        return NSLocalizedString(@"Hour", @"mode dial: step by an hour");
+      case EOTimeStepMinute:
+        return NSLocalizedString(@"Minute", @"mode dial: step by a minute");
+      case EOTimeStepSecond:
+        return NSLocalizedString(@"Second", @"mode dial: step by a second (the time unit)");
+      case EOTimeStepRise:
+        return NSLocalizedString(@"Rise", @"mode dial: step to a body's rising");
+      case EOTimeStepSet:
+        return NSLocalizedString(@"Set (of a body)", @"mode dial: step to a body's setting (not the verb 'Set', which is its own key)");
+      case EOTimeStepTransit:
+        return NSLocalizedString(@"Transit", @"mode dial: step to a body's crossing of the meridian");
+      case EOTimeStepPhase:
+        return NSLocalizedString(@"Phase", @"mode dial: step to the Moon's next quarter");
+      default:
+        ESAssert(false);
+        return @"";
+    }
+}
+
 - (NSString *)stepLabelWithBodyName:(NSString *)bodyName {
     int planet = [self bodyPlanetNumber];
     switch (unit) {

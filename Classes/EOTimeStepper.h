@@ -72,6 +72,7 @@ typedef enum EOTimeScrubState {
 + (bool)unitIsAstro:(EOTimeStepUnit)aUnit;      // rise, set, transit, phase
 + (bool)unitUsesBody:(EOTimeStepUnit)aUnit;     // rise, set, transit
 + (NSString *)labelForUnit:(EOTimeStepUnit)aUnit;   // the chip's label, localized
++ (NSString *)dialLabelForUnit:(EOTimeStepUnit)aUnit;   // the mode dial's: the full word, capitalized
 
 // The chip: persisted in NSUserDefaults as EOTimeStepUnit
 - (void)selectUnit:(EOTimeStepUnit)newUnit;
