@@ -184,8 +184,21 @@ static const int numBodies = sizeof(bodyPlanets) / sizeof(bodyPlanets[0]);
         }
     }
     index = (index + direction + numBodies) % numBodies;
-    body = bodyPlanets[index];
+    [self selectBody:bodyPlanets[index]];
+}
+
+- (void)selectBody:(int)planetNumber {
+    body = planetNumber;
     [[NSUserDefaults standardUserDefaults] setInteger:body forKey:EOTimeStepBodyDefaultsKey];
+}
+
++ (int)numBodies {
+    return numBodies;
+}
+
++ (int)bodyAtIndex:(int)index {
+    ESAssert(index >= 0 && index < numBodies);
+    return bodyPlanets[index];
 }
 
 //// stepping

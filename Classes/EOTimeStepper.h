@@ -80,6 +80,11 @@ typedef enum EOTimeScrubState {
 // the user's own, persisted in NSUserDefaults as EOTimeStepBody
 - (int)bodyPlanetNumber;
 - (void)stepBody:(int)direction;
+- (void)selectBody:(int)planetNumber;
+
+// The bodies the selector offers, in order (Earth has no rising or setting)
++ (int)numBodies;
++ (int)bodyAtIndex:(int)index;      // an ECPlanetNumber
 
 // The pair's label ("1 day", "Sunrise", "Jupiter transit", "Moon phase") — the caller supplies
 // the body's localized name, which lives on the UIKit side — and the status line's

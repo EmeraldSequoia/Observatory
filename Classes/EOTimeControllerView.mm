@@ -7,14 +7,31 @@
 
 #import "EOTimeControllerView.h"
 #import "EOClock.h"
-#import "EOBrass.h"
 #import "Utilities.h"
 #import <QuartzCore/QuartzCore.h>
 
-// Geometry, in canvas units.  The blocks are round gauges covering the small dials (radius 60, the eclipse
-// ring 63) with their labels; landscape's columns are wider, so its gauges are larger.
-static const double portraitGaugeSize = 130;
-static const double landscapeGaugeSize = 170;
+// Geometry, in canvas units.  The blocks cover the small dials (radius 60, the eclipse ring 63) with their
+// labels; landscape's are taller, each pair filling its side's column between the Moon or the map and the
+// big date.
+static const double portraitBlockWidth = 130;
+static const double portraitBlockHeight = 130;
+static const double landscapeBlockWidth = 170;
+static const double landscapeBlockHeight = 215;
+static const double blockPad = 8;
+static const double labelHeight = 18;           // the pair's label
+static const double statusHeight = 30;          // the status over Now: two lines, for a scrub at the limit
+// The blocks' and the odometer's frame, as the location picker's large map has it: black, a gray border
+// (EOClock's header box), a shadow
+static const double frameRadius = 12;
+static const double frameLineWidth = 2;
+static const double frameGray = 0.5;
+static const double frameAlpha = 0.5;
+static const double frameShadowOpacity = 0.6;
+// Opening, the blocks and the odometer swell out of Set / Done on a spring with a little overshoot, as the
+// picker's map does out of the small one; closing, they settle back into it without
+static const NSTimeInterval growDuration = 0.65;
+static const double growDamping = 0.72;
+static const NSTimeInterval shrinkDuration = 0.5;
 static const double buttonRadius = 8;
 static const double gap = 4;
 static const double wheelGap = 4;               // between the wheels of a group
@@ -98,22 +115,19 @@ static void setFieldText(UITextField *field, NSString *text) {
 }
 
 //// The mode dial: a rotary switch with a position per unit around its rim, clockwise from the top.  A touch
-//// on the rim turns the pointer to the nearest position, and a drag around it keeps turning; the hub shows
-//// the body for rise / set / transit, and a tap on its left or right half steps it back or on.
+//// on the rim turns the pointer to the nearest position, and a drag around it keeps turning.
 
-@interface EOTimeControllerView (ModeDial)
+@interface EOTimeControllerView (Selectors)
 - (void)dialSelectedUnit:(EOTimeStepUnit)unit;
-- (void)dialSteppedBody:(int)direction;
+- (void)ringSelectedBody:(int)planetNumber;
 @end
 
 @interface EOTimeModeDial : UIView {
     EOTimeControllerView *controller;   // not retained: our superview's superview
     EOTimeStepUnit       unit;
-    NSString             *bodyName;
-    bool                 hubTouch;      // the touch began on the hub
 }
 - (id)initWithController:(EOTimeControllerView *)aController;
-- (void)setUnit:(EOTimeStepUnit)aUnit bodyName:(NSString *)aBodyName;
+- (void)setUnit:(EOTimeStepUnit)aUnit;
 @end
 
 @implementation EOTimeModeDial
@@ -129,15 +143,8 @@ static void setFieldText(UITextField *field, NSString *text) {
     return self;
 }
 
-- (void)dealloc {
-    [bodyName release];
-    [super dealloc];
-}
-
-- (void)setUnit:(EOTimeStepUnit)aUnit bodyName:(NSString *)aBodyName {
+- (void)setUnit:(EOTimeStepUnit)aUnit {
     unit = aUnit;
-    [bodyName release];
-    bodyName = [aBodyName copy];
     [self setNeedsDisplay];
 }
 
@@ -147,10 +154,6 @@ static void setFieldText(UITextField *field, NSString *text) {
 
 - (double)rimRadius {
     return fmin(self.bounds.size.width, self.bounds.size.height) / 2 - 1;
-}
-
-- (double)hubRadius {
-    return [self rimRadius] * 0.42;
 }
 
 static double angleForPosition(int i) {
@@ -197,31 +200,14 @@ static double angleForPosition(int i) {
         [label drawAtPoint:CGPointMake(center.x - extent.width / 2, center.y - extent.height / 2) withAttributes:attributes];
     }
 
-    // The hub, with the body when the unit has one
-    double hubR = [self hubRadius];
+    // The hub the pointer turns on
+    double hubR = rim * 0.18;
     UIBezierPath *hubPath = [UIBezierPath bezierPathWithArcCenter:hub radius:hubR startAngle:0 endAngle:2 * M_PI clockwise:YES];
     [rgb(0x2a, 0x2a, 0x3e) setFill];
     [hubPath fill];
-    [rgb(0x3a, 0x3a, 0x5e) setStroke];
+    [rgb(0x88, 0xaa, 0xff) setStroke];
     hubPath.lineWidth = 1;
     [hubPath stroke];
-    if ([EOTimeStepper unitUsesBody:unit] && bodyName) {
-        double size = hubR * 0.42;
-        NSDictionary *attributes;
-        CGSize extent;
-        do {
-            attributes = [NSDictionary dictionaryWithObjectsAndKeys:[UIFont fontWithName:@"Arial" size:size], NSFontAttributeName,
-                                       rgb(0x88, 0xaa, 0xff), NSForegroundColorAttributeName, nil];
-            extent = [bodyName sizeWithAttributes:attributes];
-            size -= 0.5;
-        } while (extent.width > hubR * 1.3 && size > 6);
-        [bodyName drawAtPoint:CGPointMake(hub.x - extent.width / 2, hub.y - extent.height / 2) withAttributes:attributes];
-        NSDictionary *arrows = [NSDictionary dictionaryWithObjectsAndKeys:[UIFont systemFontOfSize:hubR * 0.5], NSFontAttributeName,
-                                             rgb(0x99, 0x99, 0xbb), NSForegroundColorAttributeName, nil];
-        CGSize arrow = [@"‹" sizeWithAttributes:arrows];
-        [@"‹" drawAtPoint:CGPointMake(hub.x - hubR * 0.88, hub.y - arrow.height / 2) withAttributes:arrows];
-        [@"›" drawAtPoint:CGPointMake(hub.x + hubR * 0.88 - arrow.width, hub.y - arrow.height / 2) withAttributes:arrows];
-    }
 }
 
 // The position nearest a point on the rim
@@ -236,33 +222,139 @@ static double angleForPosition(int i) {
 }
 
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
-    CGPoint point = [[touches anyObject] locationInView:self];
-    CGPoint hub = [self hub];
-    hubTouch = hypot(point.x - hub.x, point.y - hub.y) <= [self hubRadius];
-    if (!hubTouch) {
-        [controller dialSelectedUnit:[self unitAtPoint:point]];
-    }
+    [controller dialSelectedUnit:[self unitAtPoint:[[touches anyObject] locationInView:self]]];
 }
 
 - (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event {
-    if (!hubTouch) {
-        [controller dialSelectedUnit:[self unitAtPoint:[[touches anyObject] locationInView:self]]];
+    [controller dialSelectedUnit:[self unitAtPoint:[[touches anyObject] locationInView:self]]];
+}
+
+@end
+
+//// The body ring, for rise / set / transit: the bodies' symbols in a horseshoe around the pair, open at the top
+//// for its label, from the Sun at the upper left down and around to Neptune at the upper right.  A tap on a
+//// symbol picks that body; the middle is the pair's, and takes no touches.
+
+static const double ringFirstAngle = 320;       // degrees clockwise from the top: the Sun
+static const double ringSpacing = 35;           // between neighbours, so the nine span 280 degrees
+
+static NSString *symbolForBody(int planet) {
+    switch (planet) {
+      case ECPlanetSun:     return @"\u2609";
+      case ECPlanetMoon:    return @"\u263D";
+      case ECPlanetMercury: return @"\u263F";
+      case ECPlanetVenus:   return @"\u2640\uFE0E";     // as text: not the emoji
+      case ECPlanetMars:    return @"\u2642\uFE0E";
+      case ECPlanetJupiter: return @"\u2643";
+      case ECPlanetSaturn:  return @"\u2644";
+      case ECPlanetUranus:  return @"\u2645";
+      case ECPlanetNeptune: return @"\u2646";
+      default:              return @"?";
     }
+}
+
+@interface EOTimeBodyRing : UIView {
+    EOTimeControllerView *controller;   // not retained
+    int                  body;          // the selected ECPlanetNumber
+}
+- (id)initWithController:(EOTimeControllerView *)aController;
+- (void)setBody:(int)planetNumber;
+- (double)symbolSize;
+- (double)symbolRadius;
+- (double)innerRadius;                  // inside the symbols: the pair's room
+@end
+
+@implementation EOTimeBodyRing
+
+- (id)initWithController:(EOTimeControllerView *)aController {
+    if ((self = [super initWithFrame:CGRectZero])) {
+        controller = aController;
+        body = -1;
+        self.opaque = NO;
+        self.backgroundColor = [UIColor clearColor];
+        self.contentMode = UIViewContentModeRedraw;
+    }
+    return self;
+}
+
+- (void)setBody:(int)planetNumber {
+    body = planetNumber;
+    [self setNeedsDisplay];
+}
+
+- (CGPoint)center_ {
+    return CGPointMake(self.bounds.size.width / 2, self.bounds.size.height / 2);
+}
+
+- (double)symbolSize {
+    return fmin(self.bounds.size.width, self.bounds.size.height) * 0.125;
+}
+
+- (double)symbolRadius {
+    return fmin(self.bounds.size.width, self.bounds.size.height) / 2 - [self symbolSize] * 0.75;
+}
+
+- (double)innerRadius {
+    return [self symbolRadius] - [self symbolSize] * 0.8;
+}
+
+static CGPoint ringPoint(CGPoint c, double r, double degrees) {
+    return CGPointMake(c.x + r * sin(degrees * M_PI / 180), c.y - r * cos(degrees * M_PI / 180));
+}
+
+- (void)drawRect:(CGRect)rect {
+    CGPoint c = [self center_];
+    double r = [self symbolRadius];
+    double size = [self symbolSize];
+
+    // The track the symbols sit on, around the bottom
+    UIBezierPath *track = [UIBezierPath bezierPathWithArcCenter:c radius:r startAngle:(ringFirstAngle - 90) * M_PI / 180
+                                                       endAngle:(ringFirstAngle - 90 - ringSpacing * ([EOTimeStepper numBodies] - 1)) * M_PI / 180 clockwise:NO];
+    track.lineWidth = 1;
+    [rgb(0x3a, 0x3a, 0x5e) setStroke];
+    [track stroke];
+
+    for (int i = 0; i < [EOTimeStepper numBodies]; i++) {
+        int planet = [EOTimeStepper bodyAtIndex:i];
+        CGPoint p = ringPoint(c, r, ringFirstAngle - i * ringSpacing);
+        bool selected = (planet == body);
+        UIBezierPath *disc = [UIBezierPath bezierPathWithArcCenter:p radius:size * 0.72 startAngle:0 endAngle:2 * M_PI clockwise:YES];
+        [(selected ? rgb(0x2a, 0x2a, 0x3e) : [UIColor blackColor]) setFill];
+        [disc fill];
+        if (selected) {
+            disc.lineWidth = 1.5;
+            [rgb(0x88, 0xaa, 0xff) setStroke];
+            [disc stroke];
+        }
+        NSString *symbol = symbolForBody(planet);
+        NSDictionary *attributes = [NSDictionary dictionaryWithObjectsAndKeys:[UIFont systemFontOfSize:size], NSFontAttributeName,
+                                                 (selected ? rgb(0xcc, 0xcc, 0xff) : rgb(0x99, 0x99, 0xbb)), NSForegroundColorAttributeName, nil];
+        CGSize extent = [symbol sizeWithAttributes:attributes];
+        [symbol drawAtPoint:CGPointMake(p.x - extent.width / 2, p.y - extent.height / 2) withAttributes:attributes];
+    }
+}
+
+// Only the band the symbols are in takes touches
+- (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
+    CGPoint c = [self center_];
+    double d = hypot(point.x - c.x, point.y - c.y);
+    return d >= [self innerRadius] && d <= [self symbolRadius] + [self symbolSize] && [super pointInside:point withEvent:event];
 }
 
 - (void)touchesEnded:(NSSet *)touches withEvent:(UIEvent *)event {
-    if (hubTouch && [EOTimeStepper unitUsesBody:unit]) {
-        CGPoint point = [[touches anyObject] locationInView:self];
-        CGPoint hub = [self hub];
-        if (hypot(point.x - hub.x, point.y - hub.y) <= [self hubRadius]) {
-            [controller dialSteppedBody:(point.x < hub.x ? -1 : 1)];
-        }
+    CGPoint point = [[touches anyObject] locationInView:self];
+    CGPoint c = [self center_];
+    double angle = atan2(point.x - c.x, c.y - point.y) * 180 / M_PI;      // clockwise from the top
+    if (angle < 0) {
+        angle += 360;
     }
-    hubTouch = false;
-}
-
-- (void)touchesCancelled:(NSSet *)touches withEvent:(UIEvent *)event {
-    hubTouch = false;
+    double last = ringFirstAngle - ringSpacing * ([EOTimeStepper numBodies] - 1);
+    if (angle < last - ringSpacing / 2 || angle > ringFirstAngle + ringSpacing / 2) {
+        return;     // the opening at the top
+    }
+    int i = (int)lround((ringFirstAngle - angle) / ringSpacing);
+    i = i < 0 ? 0 : (i >= [EOTimeStepper numBodies] ? [EOTimeStepper numBodies] - 1 : i);
+    [controller ringSelectedBody:[EOTimeStepper bodyAtIndex:i]];
 }
 
 @end
@@ -271,9 +363,22 @@ static double angleForPosition(int i) {
 
 @synthesize nowBlock, driveBlock, modeBlock, stepBlock, odometer;
 
-// A block: a round gauge, solid, so the dial beneath shows only through a scrub's fade
+// The location picker's frame, on a block or the odometer: solid black, so the dial beneath shows only
+// through a scrub's fade
+static void styleAsFrame(UIView *view) {
+    view.backgroundColor = [UIColor blackColor];
+    view.layer.cornerRadius = frameRadius;
+    view.layer.borderWidth = frameLineWidth;
+    view.layer.borderColor = [UIColor colorWithWhite:frameGray alpha:frameAlpha].CGColor;
+    view.layer.shadowColor = [UIColor blackColor].CGColor;
+    view.layer.shadowOpacity = frameShadowOpacity;
+    view.layer.shadowRadius = 6;
+    view.layer.shadowOffset = CGSizeMake(0, 3);
+}
+
 - (UIView *)addBlock {
-    EOGaugeView *block = [[EOGaugeView alloc] initWithFrame:CGRectZero];
+    UIView *block = [[UIView alloc] initWithFrame:CGRectZero];
+    styleAsFrame(block);
     [self addSubview:block];
     [block release];
     return block;
@@ -396,6 +501,10 @@ static double angleForPosition(int i) {
         // button however far the finger has wandered, classed inside or outside; the drag events say which
         // side it is on meanwhile.
         stepBlock = [self addBlock];
+        // Under the pair, the body ring for rise / set / transit
+        bodyRing = [[EOTimeBodyRing alloc] initWithController:self];
+        [stepBlock addSubview:bodyRing];
+        [bodyRing release];
         stepLabel = [self addLabelTo:stepBlock font:[UIFont fontWithName:@"Arial-BoldMT" size:14] color:rgb(0xcc, 0xcc, 0xdd)];
         UIFont *pairFont = [UIFont systemFontOfSize:22];
         backButton = [self addButtonTo:stepBlock title:@"◀" font:pairFont];
@@ -422,11 +531,8 @@ static double angleForPosition(int i) {
         // The odometer: the wheels, then the keyboard button and Set / Done (EOClock's).  A typed value
         // applies when its wheel's edit ends; the era, at once.
         odometer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, EOOdometerWidth, EOOdometerHeight)];
-        odometer.opaque = NO;
-        odometer.backgroundColor = [UIColor colorWithRed:26/255.0 green:26/255.0 blue:46/255.0 alpha:0.96];
-        odometer.layer.cornerRadius = 8;
-        odometer.layer.borderWidth = 1;
-        odometer.layer.borderColor = rgb(0x3a, 0x3a, 0x5e).CGColor;
+        styleAsFrame(odometer);
+        odometer.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:odometer.bounds cornerRadius:frameRadius].CGPath;
 
         [self addSubview:odometer];
         [odometer release];
@@ -452,7 +558,9 @@ static double angleForPosition(int i) {
 
         [self layoutOdometer];
         [self layoutForLandscape:false];
-        [self setOpen:false];
+        for (UIView *view in [self openingViews]) {
+            view.hidden = YES;
+        }
         [self refresh];
     }
     return self;
@@ -474,35 +582,79 @@ static double angleForPosition(int i) {
 
 - (void)layoutForLandscape:(bool)isLandscape {
     landscape = isLandscape;
-    double size = landscape ? landscapeGaugeSize : portraitGaugeSize;
+    double w = landscape ? landscapeBlockWidth : portraitBlockWidth;
+    double h = landscape ? landscapeBlockHeight : portraitBlockHeight;
     for (UIView *block in [NSArray arrayWithObjects:nowBlock, driveBlock, modeBlock, stepBlock, nil]) {
-        block.bounds = CGRectMake(0, 0, size, size);
+        CGAffineTransform transform = block.transform;     // the bounds as they are at rest, mid-animation or not
+        block.transform = CGAffineTransformIdentity;
+        block.bounds = CGRectMake(0, 0, w, h);
+        block.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:block.bounds cornerRadius:frameRadius].CGPath;
+        block.transform = transform;
     }
-    // Everything sits on the gauge's face, in fractions of its radius, kept inside the circle
-    EOGaugeView *gauge = (EOGaugeView *)nowBlock;
-    CGPoint c = [gauge faceCenter];
-    double f = [gauge faceRadius];
+    double inner = w - 2 * blockPad;
 
-    // The status across the top of the face, Now below the centre
-    statusLabel.frame = CGRectMake(c.x - 0.75 * f, c.y - 0.66 * f, 1.5 * f, 0.44 * f);
-    nowButton.frame = CGRectMake(c.x - 0.72 * f, c.y - 0.12 * f, 1.44 * f, 0.6 * f);
+    // The status on top, Now below it, in the middle of what is left
+    statusLabel.frame = CGRectMake(blockPad, blockPad, inner, statusHeight);
+    double nowTop = blockPad + statusHeight + gap;
+    double nowHeight = fmin(64, h - nowTop - blockPad);
+    nowButton.frame = CGRectMake(blockPad, nowTop + (h - nowTop - blockPad - nowHeight) / 2, inner, nowHeight);
 
-    // The drive: ◀ ‖ ▶ across the middle
-    double driveWidth = (1.6 * f - 2 * gap) / 3;
-    reverseButton.frame = CGRectMake(c.x - 0.8 * f, c.y - 0.3 * f, driveWidth, 0.6 * f);
-    pauseButton.frame = CGRectMake(c.x - 0.8 * f + driveWidth + gap, c.y - 0.3 * f, driveWidth, 0.6 * f);
-    playButton.frame = CGRectMake(c.x - 0.8 * f + 2 * (driveWidth + gap), c.y - 0.3 * f, driveWidth, 0.6 * f);
+    // The drive: ▶ ‖ ◀ down a tall block, the lever's travel; ◀ ‖ ▶ across a square one
+    if (h > w * 1.2) {
+        double buttonHeight = (h - 2 * blockPad - 2 * gap) / 3;
+        playButton.frame = CGRectMake(blockPad, blockPad, inner, buttonHeight);
+        pauseButton.frame = CGRectMake(blockPad, blockPad + buttonHeight + gap, inner, buttonHeight);
+        reverseButton.frame = CGRectMake(blockPad, blockPad + 2 * (buttonHeight + gap), inner, buttonHeight);
+    } else {
+        double buttonWidth = (inner - 2 * gap) / 3;
+        double buttonHeight = fmin(64, h - 2 * blockPad);
+        double y = (h - buttonHeight) / 2;
+        reverseButton.frame = CGRectMake(blockPad, y, buttonWidth, buttonHeight);
+        pauseButton.frame = CGRectMake(blockPad + buttonWidth + gap, y, buttonWidth, buttonHeight);
+        playButton.frame = CGRectMake(blockPad + 2 * (buttonWidth + gap), y, buttonWidth, buttonHeight);
+    }
 
-    // The mode dial: the whole face
-    modeDial.frame = CGRectMake(c.x - f, c.y - f, 2 * f, 2 * f);
+    // The mode dial: the largest circle the block holds
+    double dial = fmin(inner, h - 2 * blockPad);
+    modeDial.frame = CGRectMake((w - dial) / 2, (h - dial) / 2, dial, dial);
     [modeDial setNeedsDisplay];
 
-    // The pair: its label across the top of the face, the two buttons side by side below
-    stepLabel.frame = CGRectMake(c.x - 0.7 * f, c.y - 0.72 * f, 1.4 * f, 0.3 * f);
-    double pairWidth = 0.72 * f - gap / 2;
-    backButton.frame = CGRectMake(c.x - 0.72 * f, c.y - 0.36 * f, pairWidth, 0.86 * f);
-    forwardButton.frame = CGRectMake(c.x + gap / 2, c.y - 0.36 * f, pairWidth, 0.86 * f);
-    padlock.frame = CGRectMake(c.x - f, c.y - 0.36 * f, 2 * f, 0.86 * f);
+    [self layoutStepBlock];
+}
+
+// The pair.  Without a body: its label on top, the two buttons side by side below, filling the block.  With
+// one: the body ring, as large as the block holds and at its foot, the buttons in the ring's middle and the
+// label above them (in the ring's opening, in a square block).
+- (void)layoutStepBlock {
+    double w = landscape ? landscapeBlockWidth : portraitBlockWidth;
+    double h = landscape ? landscapeBlockHeight : portraitBlockHeight;
+    double inner = w - 2 * blockPad;
+    bodyRing.hidden = !ringShown;
+    if (!ringShown) {
+        stepLabel.frame = CGRectMake(blockPad, blockPad, inner, labelHeight);
+        double pairTop = blockPad + labelHeight + gap;
+        double pairWidth = (inner - gap) / 2;
+        backButton.frame = CGRectMake(blockPad, pairTop, pairWidth, h - pairTop - blockPad);
+        forwardButton.frame = CGRectMake(blockPad + pairWidth + gap, pairTop, pairWidth, h - pairTop - blockPad);
+        padlock.frame = CGRectMake(0, pairTop, w, h - pairTop - blockPad);
+        return;
+    }
+    double side = fmin(inner, h - 2 * blockPad);
+    bodyRing.frame = CGRectMake((w - side) / 2, h - blockPad - side, side, side);
+    [bodyRing setNeedsDisplay];
+    CGPoint c = CGPointMake(w / 2, h - blockPad - side / 2);
+    double r = [bodyRing innerRadius];
+    if (h - side > labelHeight + 2 * blockPad) {
+        stepLabel.frame = CGRectMake(blockPad, blockPad, inner, labelHeight);
+    } else {
+        double chord = 1.3 * [bodyRing symbolRadius] * sin(ringSpacing * M_PI / 180 * 1.15);
+        stepLabel.frame = CGRectMake(c.x - chord, blockPad - 3, 2 * chord, labelHeight);
+    }
+    double pairWidth = 0.8 * r - gap / 2;
+    double pairHeight = 1.25 * r;
+    backButton.frame = CGRectMake(c.x - 0.8 * r, c.y - pairHeight / 2 + 0.1 * r, pairWidth, pairHeight);
+    forwardButton.frame = CGRectMake(c.x + gap / 2, c.y - pairHeight / 2 + 0.1 * r, pairWidth, pairHeight);
+    padlock.frame = CGRectMake(c.x - r, c.y - r, 2 * r, 2 * r);
 }
 
 // The wheels centred in the space left of the buttons; the keyboard button where Now goes while closed
@@ -529,14 +681,65 @@ static double angleForPosition(int i) {
     keyboardButton.frame = CGRectMake(wheelsWidth + 4, y, 69, height);
 }
 
-- (void)setOpen:(bool)isOpen {
+- (NSArray *)openingViews {
+    return [NSArray arrayWithObjects:nowBlock, driveBlock, modeBlock, stepBlock, odometer, nil];
+}
+
+// The transform that puts a view, at rest, over the given rect
+static CGAffineTransform transformOnto(UIView *view, CGRect rect) {
+    CGSize size = view.bounds.size;
+    CGAffineTransform t = CGAffineTransformMakeTranslation(CGRectGetMidX(rect) - view.center.x, CGRectGetMidY(rect) - view.center.y);
+    return CGAffineTransformScale(t, rect.size.width / size.width, rect.size.height / size.height);
+}
+
+- (void)setOpen:(bool)isOpen fromRect:(CGRect)source {
     open = isOpen;
-    for (UIView *block in [NSArray arrayWithObjects:nowBlock, driveBlock, modeBlock, stepBlock, nil]) {
-        block.hidden = !open;
-    }
+    NSArray *views = [self openingViews];
+    bool animate = self.window && !UIAccessibilityIsReduceMotionEnabled();
     if (open) {
         [self refresh];
+        for (UIView *view in views) {
+            if (animate && view.hidden) {
+                view.transform = transformOnto(view, source);
+            }
+            view.hidden = NO;
+            view.userInteractionEnabled = YES;
+        }
+        if (!animate) {
+            return;
+        }
+        [UIView animateWithDuration:growDuration delay:0 usingSpringWithDamping:growDamping initialSpringVelocity:0
+                            options:UIViewAnimationOptionBeginFromCurrentState animations:^{
+            for (UIView *view in views) {
+                view.transform = CGAffineTransformIdentity;
+            }
+        } completion:NULL];
+        return;
     }
+    // Closing: nothing on the way back takes a touch, and once it is all in Set / Done, it goes (unless it has
+    // opened again meanwhile)
+    for (UIView *view in views) {
+        view.userInteractionEnabled = NO;
+    }
+    void (^done)(BOOL) = ^(BOOL finished) {
+        if (open) {
+            return;
+        }
+        for (UIView *view in views) {
+            view.hidden = YES;
+            view.transform = CGAffineTransformIdentity;
+        }
+    };
+    if (!animate) {
+        done(YES);
+        return;
+    }
+    [UIView animateWithDuration:shrinkDuration delay:0 usingSpringWithDamping:1 initialSpringVelocity:0
+                        options:UIViewAnimationOptionBeginFromCurrentState animations:^{
+        for (UIView *view in views) {
+            view.transform = transformOnto(view, source);
+        }
+    } completion:done];
 }
 
 //// The widgets' actions
@@ -566,8 +769,8 @@ static double angleForPosition(int i) {
     [self refresh];
 }
 
-- (void)dialSteppedBody:(int)direction {
-    [stepper stepBody:direction];
+- (void)ringSelectedBody:(int)planetNumber {
+    [stepper selectBody:planetNumber];
     [self refresh];
 }
 
@@ -790,9 +993,16 @@ static double angleForPosition(int i) {
     EOTimeStepUnit unit = stepper.unit;
     int body = [stepper bodyPlanetNumber];
     NSString *bodyName = [Utilities nameOfPlanetWithNumber:(ECPlanetNumber)body];
-    if (unit != shownUnit || body != shownBody) {
-        [modeDial setUnit:unit bodyName:bodyName];
+    if (unit != shownUnit) {
+        [modeDial setUnit:unit];
         shownUnit = unit;
+        if ([EOTimeStepper unitUsesBody:unit] != ringShown) {
+            ringShown = [EOTimeStepper unitUsesBody:unit];
+            [self layoutStepBlock];
+        }
+    }
+    if (body != shownBody) {
+        [bodyRing setBody:body];
         shownBody = body;
     }
     setLabelText(stepLabel, [stepper stepLabelWithBodyName:bodyName]);

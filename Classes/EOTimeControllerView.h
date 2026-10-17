@@ -3,11 +3,13 @@
 //  Emerald Observatory
 //
 //  The time controller: four blocks that cover the four small dials while Set mode is open (the
-//  clock's status over Now, the drive ◀ ‖ ▶, the mode dial with its body, and the ◀ ▶ pair: tap to
-//  step, hold to scrub, lift off to run hands-free), and the odometer along the top, which replaces
+//  clock's status over Now, the drive ◀ ‖ ▶, the mode dial, and the ◀ ▶ pair: tap to step, hold to
+//  scrub, lift off to run hands-free; ringed by the bodies for rise / set / transit), and the odometer
+//  along the top, which replaces
 //  the old strip: wheels for the displayed date and time, each rolled by a vertical drag, and a
-//  keyboard switch that, while on, turns them into fields to type into instead.  The odometer shows
-//  only while the controller is open (EOClock's timeStripVisible).
+//  keyboard switch that, while on, turns them into fields to type into instead.  The blocks and the
+//  odometer show only while the controller is open, swelling out of Set / Done as it opens and
+//  settling back into it as it closes, as the location picker's map does.
 //
 //  The view itself spans the canvas and takes no touches; EOClock places its blocks where the
 //  dials are and its odometer where the strip goes (moveClockWidgetsForOrientation:), with
@@ -22,6 +24,7 @@
 
 @class EOClock;
 @class EOTimeModeDial;
+@class EOTimeBodyRing;
 
 // The odometer, in canvas units: one line of wheels, with EOOdometerButtonsWidth kept clear at its right
 // end for EOClock's Set / Done and, beside it, Now (closed) or the keyboard button (open)
@@ -43,6 +46,8 @@ static const double EOOdometerButtonsWidth = 154;
     UIButton       *pauseButton;
     UIButton       *playButton;
     EOTimeModeDial *modeDial;
+    EOTimeBodyRing *bodyRing;       // around the pair, for rise / set / transit
+    bool           ringShown;
     UIButton       *backButton;
     UIButton       *forwardButton;
     UILabel        *stepLabel;
@@ -59,7 +64,7 @@ static const double EOOdometerButtonsWidth = 154;
     bool           open;            // the blocks show
     bool           landscape;       // the blocks' shape
     EOTimeStepUnit shownUnit;       // the dial's unit as last drawn
-    int            shownBody;       // and its body
+    int            shownBody;       // the ring's body as last drawn
     int            shownHeld;       // 0, or the direction of the pair button drawn as held
     int            shownBadge;      // the padlock as drawn: 0 none, 1 the lock zone, 2 locked
     bool           offButton;       // the pair's touch has left its button: a lift now would lock
@@ -82,8 +87,8 @@ static const double EOOdometerButtonsWidth = 154;
 // in landscape, where each side's two dials stack in a column, a square in portrait's corners
 - (void)layoutForLandscape:(bool)isLandscape;
 
-// Set mode: the blocks show (EOClock shows the odometer)
-- (void)setOpen:(bool)isOpen;
+// Set mode: the blocks and the odometer swell out of the given rect (Set / Done's frame) or settle back into it
+- (void)setOpen:(bool)isOpen fromRect:(CGRect)source;
 
 // Once per clock tick while the odometer or the blocks show
 - (void)refresh;

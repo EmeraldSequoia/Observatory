@@ -449,17 +449,12 @@ BOOL timeChanged = false;
     return setMode;
 }
 
-// Show or hide the odometer (and the status bar with it) as the controller opens and closes.  The
-// reorientation and Help choreography set both themselves.
+// Show or hide the status bar as the controller opens and closes (the controller shows and hides the
+// odometer itself, with its blocks).  The reorientation and Help choreography set both themselves.
 - (void)updateTimeStripVisibility {
     if (aboutToReorient || finishingHelp) {
 	return;
     }
-    bool visible = [self timeStripVisible];
-    if (self.timeStrip.hidden == !visible) {
-	return;
-    }
-    self.timeStrip.hidden = !visible;
     [self setStatusBar:NULL];
 }
 
@@ -584,7 +579,7 @@ BOOL timeChanged = false;
     }
     setMode = true;
     [self bringTimePanelToFront];
-    [timePanel setOpen:true];
+    [timePanel setOpen:true fromRect:resetBut.frame];
 #ifndef NDEBUG
     demoBut.hidden = false;
     [view bringSubviewToFront:demoBut];
@@ -600,7 +595,7 @@ BOOL timeChanged = false;
     }
     [timePanel prepareToHide];	// a hidden view never gets the release that would end a scrub
     setMode = false;
-    [timePanel setOpen:false];
+    [timePanel setOpen:false fromRect:resetBut.frame];
     demoBut.hidden = true;
     [resetBut setTitle:NSLocalizedString(@"Set", @"Set (verb)") forState:UIControlStateNormal];
     // The eclipse demo (debug builds) borrows the location and time zone; closing the controller gives them back
