@@ -259,10 +259,6 @@ static void setFieldText(UITextField *field, NSString *text) {
     return fmin(self.bounds.size.width, self.bounds.size.height) / 2 - 1;
 }
 
-static double angleForPosition(int i) {
-    return i * 2 * M_PI / EOTimeStepNumUnits;
-}
-
 // One graduation of ticks around the band, n to the turn, from radius r1 out to r2
 static void drawTicks(CGContextRef context, CGPoint c, int n, double r1, double r2, double width, UIColor *color, double offset) {
     CGContextSetLineWidth(context, width);
@@ -349,7 +345,7 @@ static void drawGraduations(CGContextRef context, CGPoint c, int n, double rim, 
     double hubR = rim * 0.1;
     double wordsOuter = rim - 3;
     double wordsInner = rim * 0.26;
-    double step = 2 * M_PI / EOTimeStepNumUnits;
+    double step = 2 * M_PI / (int)EOTimeStepNumUnits;
 
     // The words, all at one size whatever is selected: the largest at which the longest fits between the hub
     // and the rim
@@ -401,7 +397,7 @@ static void drawGraduations(CGContextRef context, CGPoint c, int n, double rim, 
 
     // The handle, always the same, framing the selected word
     UIColor *gold = [UIColor colorWithRed:1 green:0xc1/256.0 blue:0x25/256.0 alpha:1];      // the clock's minute hand
-    drawHandle(context, c, unit * step, rim, hubR, step, gold, 0);
+    drawHandle(context, c, (int)unit * step, rim, hubR, step, gold, 0);
 
     // The hub the handle turns on
     CGContextSetLineWidth(context, 1);
@@ -418,7 +414,7 @@ static void drawGraduations(CGContextRef context, CGPoint c, int n, double rim, 
     if (angle < 0) {
         angle += 2 * M_PI;
     }
-    int i = (int)lround(angle / (2 * M_PI / EOTimeStepNumUnits)) % EOTimeStepNumUnits;
+    int i = (int)lround(angle / (2 * M_PI / (int)EOTimeStepNumUnits)) % EOTimeStepNumUnits;
     return (EOTimeStepUnit)i;
 }
 
