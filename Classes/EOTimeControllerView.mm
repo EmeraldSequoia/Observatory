@@ -11,24 +11,18 @@
 #import "Utilities.h"
 #import <QuartzCore/QuartzCore.h>
 
-// Geometry, in canvas units.  The blocks cover the small dials (radius 60, the eclipse ring 63) with their
-// labels; landscape's are taller, each pair filling its side's column between the Moon or the map and the
-// big date.
-static const double portraitBlockWidth = 130;
-static const double portraitBlockHeight = 130;
-static const double landscapeBlockWidth = 170;
-static const double landscapeBlockHeight = 215;
-static const double blockPad = 10;              // inside the brass rim
+// Geometry, in canvas units.  The blocks are round gauges covering the small dials (radius 60, the eclipse
+// ring 63) with their labels; landscape's columns are wider, so its gauges are larger.
+static const double portraitGaugeSize = 130;
+static const double landscapeGaugeSize = 170;
 static const double buttonRadius = 8;
 static const double gap = 4;
-static const double labelHeight = 18;           // the pair's label
 static const double wheelGap = 4;               // between the wheels of a group
 static const double groupGap = 14;              // between the date's wheels and the time's
 static const double eraWidth = 40;
 static const double yearWidth = 52;
 static const double wheelWidth = 34;            // month, day, hour, minute, second
 static const double notch = 20;                 // a wheel drag's travel per unit rolled
-static const double statusHeight = 30;          // the status over Now: two lines, for a scrub at the limit
 static const double scrubAlpha = 0.38;          // the blocks while a scrub runs (the web's tuned level)
 static const NSTimeInterval fadeDuration = 0.15;
 static const NSTimeInterval flashDuration = 0.3;    // a pair button after a search that found nothing
@@ -277,9 +271,9 @@ static double angleForPosition(int i) {
 
 @synthesize nowBlock, driveBlock, modeBlock, stepBlock, odometer;
 
-// A block: iron in a brass rim, solid, so the dial beneath shows only through a scrub's fade
+// A block: a round gauge, solid, so the dial beneath shows only through a scrub's fade
 - (UIView *)addBlock {
-    UIView *block = [[EOBrassPlateView alloc] initWithFrame:CGRectZero];
+    EOGaugeView *block = [[EOGaugeView alloc] initWithFrame:CGRectZero];
     [self addSubview:block];
     [block release];
     return block;
@@ -480,46 +474,35 @@ static double angleForPosition(int i) {
 
 - (void)layoutForLandscape:(bool)isLandscape {
     landscape = isLandscape;
-    double w = landscape ? landscapeBlockWidth : portraitBlockWidth;
-    double h = landscape ? landscapeBlockHeight : portraitBlockHeight;
+    double size = landscape ? landscapeGaugeSize : portraitGaugeSize;
     for (UIView *block in [NSArray arrayWithObjects:nowBlock, driveBlock, modeBlock, stepBlock, nil]) {
-        block.bounds = CGRectMake(0, 0, w, h);
+        block.bounds = CGRectMake(0, 0, size, size);
     }
-    double inner = w - 2 * blockPad;
+    // Everything sits on the gauge's face, in fractions of its radius, kept inside the circle
+    EOGaugeView *gauge = (EOGaugeView *)nowBlock;
+    CGPoint c = [gauge faceCenter];
+    double f = [gauge faceRadius];
 
-    // The status on top, Now below it, in the middle of what is left
-    statusLabel.frame = CGRectMake(blockPad, blockPad, inner, statusHeight);
-    double nowTop = blockPad + statusHeight + gap;
-    double nowHeight = fmin(64, h - nowTop - blockPad);
-    nowButton.frame = CGRectMake(blockPad, nowTop + (h - nowTop - blockPad - nowHeight) / 2, inner, nowHeight);
+    // The status across the top of the face, Now below the centre
+    statusLabel.frame = CGRectMake(c.x - 0.75 * f, c.y - 0.66 * f, 1.5 * f, 0.44 * f);
+    nowButton.frame = CGRectMake(c.x - 0.72 * f, c.y - 0.12 * f, 1.44 * f, 0.6 * f);
 
-    // The drive: ▶ ‖ ◀ down a tall block, the lever's travel; ◀ ‖ ▶ across a square one
-    if (h > w * 1.2) {
-        double buttonHeight = (h - 2 * blockPad - 2 * gap) / 3;
-        playButton.frame = CGRectMake(blockPad, blockPad, inner, buttonHeight);
-        pauseButton.frame = CGRectMake(blockPad, blockPad + buttonHeight + gap, inner, buttonHeight);
-        reverseButton.frame = CGRectMake(blockPad, blockPad + 2 * (buttonHeight + gap), inner, buttonHeight);
-    } else {
-        double buttonWidth = (inner - 2 * gap) / 3;
-        double buttonHeight = fmin(64, h - 2 * blockPad);
-        double y = (h - buttonHeight) / 2;
-        reverseButton.frame = CGRectMake(blockPad, y, buttonWidth, buttonHeight);
-        pauseButton.frame = CGRectMake(blockPad + buttonWidth + gap, y, buttonWidth, buttonHeight);
-        playButton.frame = CGRectMake(blockPad + 2 * (buttonWidth + gap), y, buttonWidth, buttonHeight);
-    }
+    // The drive: ◀ ‖ ▶ across the middle
+    double driveWidth = (1.6 * f - 2 * gap) / 3;
+    reverseButton.frame = CGRectMake(c.x - 0.8 * f, c.y - 0.3 * f, driveWidth, 0.6 * f);
+    pauseButton.frame = CGRectMake(c.x - 0.8 * f + driveWidth + gap, c.y - 0.3 * f, driveWidth, 0.6 * f);
+    playButton.frame = CGRectMake(c.x - 0.8 * f + 2 * (driveWidth + gap), c.y - 0.3 * f, driveWidth, 0.6 * f);
 
-    // The mode dial: the largest circle the block holds
-    double dial = fmin(inner, h - 2 * blockPad);
-    modeDial.frame = CGRectMake((w - dial) / 2, (h - dial) / 2, dial, dial);
+    // The mode dial: the whole face
+    modeDial.frame = CGRectMake(c.x - f, c.y - f, 2 * f, 2 * f);
     [modeDial setNeedsDisplay];
 
-    // The pair: its label on top, the two buttons side by side below
-    stepLabel.frame = CGRectMake(blockPad, blockPad, inner, labelHeight);
-    double pairTop = blockPad + labelHeight + gap;
-    double pairWidth = (inner - gap) / 2;
-    backButton.frame = CGRectMake(blockPad, pairTop, pairWidth, h - pairTop - blockPad);
-    forwardButton.frame = CGRectMake(blockPad + pairWidth + gap, pairTop, pairWidth, h - pairTop - blockPad);
-    padlock.frame = CGRectMake(0, pairTop, w, h - pairTop - blockPad);
+    // The pair: its label across the top of the face, the two buttons side by side below
+    stepLabel.frame = CGRectMake(c.x - 0.7 * f, c.y - 0.72 * f, 1.4 * f, 0.3 * f);
+    double pairWidth = 0.72 * f - gap / 2;
+    backButton.frame = CGRectMake(c.x - 0.72 * f, c.y - 0.36 * f, pairWidth, 0.86 * f);
+    forwardButton.frame = CGRectMake(c.x + gap / 2, c.y - 0.36 * f, pairWidth, 0.86 * f);
+    padlock.frame = CGRectMake(c.x - f, c.y - 0.36 * f, 2 * f, 0.86 * f);
 }
 
 // The wheels centred in the space left of the buttons; the keyboard button where Now goes while closed

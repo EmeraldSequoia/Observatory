@@ -32,6 +32,17 @@ UIFont *EOEngravingFont(double size);
 UIColor *EOBrassTextColor(void);
 UIColor *EOCreamTextColor(void);
 
-// A block of the controller: a blackened-iron plate in a beveled brass rim, a rivet in each corner
-@interface EOBrassPlateView : UIView
+// A block of the controller: a round gauge, after the old steam gauges.  A thick, rolled brass bezel
+// steps down to a thinner ring sloping in to the face, which is silvered metal or blackened iron.
+typedef enum EOGaugeFace {
+    EOGaugeFaceSilver,
+    EOGaugeFaceIron
+} EOGaugeFace;
+
+@interface EOGaugeView : UIView {
+    EOGaugeFace face;
+}
+@property (nonatomic) EOGaugeFace face;
+- (CGPoint)faceCenter;
+- (double)faceRadius;          // the face inside the bezel, for laying out what goes on it
 @end
