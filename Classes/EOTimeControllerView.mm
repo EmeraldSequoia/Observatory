@@ -117,7 +117,7 @@ static void setFieldText(UITextField *field, NSString *text) {
 }
 
 //// The mode dial: a rotary switch with a position per unit around its rim, clockwise from the top.  A touch
-//// on the rim turns the pointer to the nearest position, and a drag around it keeps turning.
+//// anywhere on it turns the hand to the nearest position, and a drag around it keeps turning.
 
 @interface EOTimeControllerView (Selectors)
 - (void)dialSelectedUnit:(EOTimeStepUnit)unit;
@@ -162,54 +162,103 @@ static double angleForPosition(int i) {
     return i * 2 * M_PI / EOTimeStepNumUnits;
 }
 
+// One graduation of ticks around the band, n to the turn, from radius r1 out to r2
+static void drawTicks(CGContextRef context, CGPoint c, int n, double r1, double r2, double width, UIColor *color, double offset) {
+    CGContextSetLineWidth(context, width);
+    CGContextSetStrokeColorWithColor(context, color.CGColor);
+    for (int i = 0; i < n; i++) {
+        double a = (i + offset) * 2 * M_PI / n;
+        CGContextMoveToPoint(context, c.x + r1 * sin(a), c.y - r1 * cos(a));
+        CGContextAddLineToPoint(context, c.x + r2 * sin(a), c.y - r2 * cos(a));
+    }
+    CGContextStrokePath(context);
+}
+
+// After the Moon azimuth dial: a translucent band around the rim carrying the graduations, faint spokes from a
+// small hub, and an outline hand; the positions' words lie radially just inside the band, in the location
+// picker's Hoefler Text, reading out from the centre on the right and in toward it on the left
 - (void)drawRect:(CGRect)rect {
-    CGPoint hub = [self hub];
+    CGContextRef context = UIGraphicsGetCurrentContext();
+    CGPoint c = [self hub];
     double rim = [self rimRadius];
-    double labelRadius = rim - rim * 0.17;
+    double band = rim * 0.17;
+    double hubR = rim * 0.1;
+    double wordsOuter = rim - band - 2;
+    double wordsInner = rim * 0.26;
+    double step = 2 * M_PI / EOTimeStepNumUnits;
 
-    UIBezierPath *ring = [UIBezierPath bezierPathWithArcCenter:hub radius:rim - 0.5 startAngle:0 endAngle:2 * M_PI clockwise:YES];
-    [rgb(0x22, 0x22, 0x38) setFill];
-    [ring fill];
-    [rgb(0x3a, 0x3a, 0x5e) setStroke];
-    ring.lineWidth = 1;
-    [ring stroke];
+    // The band
+    CGContextSetLineWidth(context, 0.5);
+    CGContextSetRGBStrokeColor(context, 1, 1, 1, 0.6);
+    CGContextSetRGBFillColor(context, 1, 1, 1, 0.15);
+    CGContextAddArc(context, c.x, c.y, rim, 0, 2 * M_PI, 0);
+    CGContextAddArc(context, c.x, c.y, rim - band, 0, 2 * M_PI, 0);
+    CGContextDrawPath(context, kCGPathEOFillStroke);
 
-    // The pointer, under the labels
-    double angle = angleForPosition(unit);
-    UIBezierPath *pointer = [UIBezierPath bezierPath];
-    [pointer moveToPoint:hub];
-    [pointer addLineToPoint:CGPointMake(hub.x + (labelRadius - rim * 0.13) * sin(angle), hub.y - (labelRadius - rim * 0.13) * cos(angle))];
-    pointer.lineWidth = 3;
-    pointer.lineCapStyle = kCGLineCapRound;
-    [rgb(0x88, 0xaa, 0xff) setStroke];
-    [pointer stroke];
+    // Spokes between the positions, as the azimuth dial's between its compass points
+    drawTicks(context, c, EOTimeStepNumUnits, hubR, wordsOuter, 1, [UIColor colorWithRed:0.3 green:0.3 blue:0.9 alpha:0.35], 0.5);
 
-    // The positions' labels, each shrunk to its share of the rim
-    double slot = 2 * M_PI * labelRadius / EOTimeStepNumUnits;
+    // The graduations: a long tick at each position, short ones between
+    UIColor *tickColor = [UIColor lightGrayColor];
+    drawTicks(context, c, EOTimeStepNumUnits * 4, rim - band * 0.45, rim, 1, tickColor, 0);
+    drawTicks(context, c, EOTimeStepNumUnits, rim - band, rim, 1.2, tickColor, 0);
+
+    // The hand, an outline as the azimuth dial's, out to the band at the selected position
+    double a = unit * step;
+    CGPoint tip = CGPointMake(c.x + (rim - band) * sin(a), c.y - (rim - band) * cos(a));
+    CGPoint left = CGPointMake(c.x - hubR * 0.6 * cos(a), c.y - hubR * 0.6 * sin(a));
+    CGPoint right = CGPointMake(c.x + hubR * 0.6 * cos(a), c.y + hubR * 0.6 * sin(a));
+    CGContextSetLineWidth(context, 1);
+    CGContextSetStrokeColorWithColor(context, [UIColor lightGrayColor].CGColor);
+    CGContextMoveToPoint(context, left.x, left.y);
+    CGContextAddLineToPoint(context, tip.x, tip.y);
+    CGContextAddLineToPoint(context, right.x, right.y);
+    CGContextClosePath(context);
+    CGContextStrokePath(context);
+
+    // The hub over the hand's base: the band's translucent white, made solid
+    CGContextSetLineWidth(context, 0.5);
+    CGContextSetRGBStrokeColor(context, 1, 1, 1, 0.6);
+    CGContextSetRGBFillColor(context, 0.15, 0.15, 0.15, 1);
+    CGContextAddArc(context, c.x, c.y, hubR, 0, 2 * M_PI, 0);
+    CGContextDrawPath(context, kCGPathFillStroke);
+
+    // The words, all at one size: the largest at which the longest fits between the hub and the band
+    double size = rim * 0.17;
+    UIFont *font, *bold;
+    double widest;
+    do {
+        font = [UIFont fontWithName:@"HoeflerText-Regular" size:size];
+        bold = [UIFont fontWithName:@"HoeflerText-Black" size:size];
+        widest = 0;
+        for (int i = 0; i < EOTimeStepNumUnits; i++) {
+            UIFont *f = (i == unit) ? bold : font;
+            widest = fmax(widest, [[EOTimeStepper labelForUnit:(EOTimeStepUnit)i] sizeWithAttributes:[NSDictionary dictionaryWithObject:f forKey:NSFontAttributeName]].width);
+        }
+        size -= 0.25;
+    } while (widest > wordsOuter - wordsInner && size > 5);
+    UIColor *gold = [UIColor colorWithRed:1 green:0xc1/256.0 blue:0x25/256.0 alpha:1];      // the clock's minute hand
+    UIColor *white = [UIColor colorWithWhite:1 alpha:0.85];
+    UIColor *blue = [UIColor colorWithRed:0.65 green:0.75 blue:1 alpha:0.9];
     for (int i = 0; i < EOTimeStepNumUnits; i++) {
         NSString *label = [EOTimeStepper labelForUnit:(EOTimeStepUnit)i];
-        UIColor *color = (i == unit) ? rgb(0xcc, 0xcc, 0xff) : ([EOTimeStepper unitIsAstro:(EOTimeStepUnit)i] ? rgb(0x7a, 0x8a, 0xa8) : rgb(0x88, 0x88, 0x99));
-        double size = rim * 0.15;
-        NSDictionary *attributes;
-        CGSize extent;
-        do {
-            attributes = [NSDictionary dictionaryWithObjectsAndKeys:[UIFont fontWithName:(i == unit ? @"Arial-BoldMT" : @"Arial") size:size], NSFontAttributeName,
-                                       color, NSForegroundColorAttributeName, nil];
-            extent = [label sizeWithAttributes:attributes];
-            size -= 0.5;
-        } while (extent.width > slot * 0.92 && size > 6);
-        CGPoint center = CGPointMake(hub.x + labelRadius * sin(angleForPosition(i)), hub.y - labelRadius * cos(angleForPosition(i)));
-        [label drawAtPoint:CGPointMake(center.x - extent.width / 2, center.y - extent.height / 2) withAttributes:attributes];
+        NSDictionary *attributes = [NSDictionary dictionaryWithObjectsAndKeys:(i == unit ? bold : font), NSFontAttributeName,
+                                                 (i == unit ? gold : ([EOTimeStepper unitIsAstro:(EOTimeStepUnit)i] ? blue : white)), NSForegroundColorAttributeName, nil];
+        CGSize extent = [label sizeWithAttributes:attributes];
+        double angle = i * step;
+        CGContextSaveGState(context);
+        CGContextTranslateCTM(context, c.x, c.y);
+        if (angle < M_PI) {
+            // The right half: along the radius, reading outward, ending at the band
+            CGContextRotateCTM(context, angle - M_PI / 2);
+            [label drawAtPoint:CGPointMake(wordsOuter - extent.width, -extent.height / 2) withAttributes:attributes];
+        } else {
+            // The left half: turned around, reading inward, starting at the band
+            CGContextRotateCTM(context, angle + M_PI / 2);
+            [label drawAtPoint:CGPointMake(-wordsOuter, -extent.height / 2) withAttributes:attributes];
+        }
+        CGContextRestoreGState(context);
     }
-
-    // The hub the pointer turns on
-    double hubR = rim * 0.18;
-    UIBezierPath *hubPath = [UIBezierPath bezierPathWithArcCenter:hub radius:hubR startAngle:0 endAngle:2 * M_PI clockwise:YES];
-    [rgb(0x2a, 0x2a, 0x3e) setFill];
-    [hubPath fill];
-    [rgb(0x88, 0xaa, 0xff) setStroke];
-    hubPath.lineWidth = 1;
-    [hubPath stroke];
 }
 
 // The position nearest a point on the rim
