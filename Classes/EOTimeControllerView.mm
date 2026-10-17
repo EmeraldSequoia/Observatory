@@ -252,18 +252,17 @@ static void drawTicks(CGContextRef context, CGPoint c, int n, double r1, double 
         CGContextRestoreGState(context);
     }
 
-    // The handle, always the same: in its own frame, x out along the selected position's radius.  A loop
-    // narrow at the hub and as wide at the rim as a word is tall, with rounded corners, and a stem back to the
-    // hub it turns on.
+    // The handle, always the same: in its own frame, x out along the selected position's radius.  A wedge
+    // narrow at the hub, its sides reaching the rim halfway between the full tick midway to each neighbour and
+    // the half tick before it, its end following the rim; and a stem back to the hub it turns on.
     double inner = hubR * 1.8;
     double outer = rim - 0.5;
     double innerHalf = hubR * 0.35;
-    double outerHalf = font.lineHeight / 2 + 3;
-    double corner = fmin(4, outerHalf * 0.6);
+    double spread = 3.5 / 8 * step;     // the full tick is at 4/8 of a step from a word, the half tick at 3/8
     CGMutablePathRef loop = CGPathCreateMutable();
     CGPathMoveToPoint(loop, NULL, inner, -innerHalf);
-    CGPathAddArcToPoint(loop, NULL, outer, -outerHalf, outer, 0, corner);
-    CGPathAddArcToPoint(loop, NULL, outer, outerHalf, inner, innerHalf, corner);
+    CGPathAddLineToPoint(loop, NULL, outer * cos(spread), -outer * sin(spread));
+    CGPathAddArc(loop, NULL, 0, 0, outer, -spread, spread, false);
     CGPathAddLineToPoint(loop, NULL, inner, innerHalf);
     CGPathAddArc(loop, NULL, inner, 0, innerHalf, M_PI / 2, 3 * M_PI / 2, false);
     CGPathCloseSubpath(loop);
