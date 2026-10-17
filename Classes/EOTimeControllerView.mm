@@ -53,7 +53,95 @@ static UIColor *rgb(int r, int g, int b) {
 }
 
 // The looks a button can have: the web's .tp-btn, .tp-btn.holding, .tp-btn.flash-fail and .tp-btn.active
+//// A pair button: the visible button (its face) drawn inside a larger, invisible target.  The target is the
+//// button's frame; with a target circle, only the part of the frame inside that circle takes touches, so
+//// that what lies beyond it (the body dial's band) gets them instead.
+
+@interface EOPairButton : UIButton {
+    UIView    *face;
+    UILabel   *glyph;
+    UIColor   *glyphColor;
+    CGPoint   circleCenter;     // in the button's coordinates
+    double    circleRadius;     // 0: the whole frame is the target
+}
+@property (readonly) UIView *face;
+- (void)setGlyph:(NSString *)text font:(UIFont *)font;
+- (void)setGlyphColor:(UIColor *)color;
+- (void)setFaceFrame:(CGRect)rect;
+- (void)setTargetCircleCenter:(CGPoint)center radius:(double)radius;
+@end
+
+@implementation EOPairButton
+
+@synthesize face;
+
+- (id)initWithFrame:(CGRect)frame {
+    if ((self = [super initWithFrame:frame])) {
+        face = [[UIView alloc] initWithFrame:CGRectZero];
+        face.userInteractionEnabled = NO;
+        face.layer.borderWidth = 1;
+        [self addSubview:face];
+        [face release];
+        glyph = [[UILabel alloc] initWithFrame:CGRectZero];
+        glyph.textAlignment = NSTextAlignmentCenter;
+        glyph.backgroundColor = [UIColor clearColor];
+        [face addSubview:glyph];
+        [glyph release];
+        circleRadius = 0;
+    }
+    return self;
+}
+
+- (void)dealloc {
+    [glyphColor release];
+    [super dealloc];
+}
+
+- (void)setGlyph:(NSString *)text font:(UIFont *)font {
+    glyph.text = text;
+    glyph.font = font;
+}
+
+- (void)setGlyphColor:(UIColor *)color {
+    [glyphColor release];
+    glyphColor = [color retain];
+    glyph.textColor = self.highlighted ? [UIColor colorWithRed:0xcc/255.0 green:0xcc/255.0 blue:1 alpha:1] : color;
+}
+
+// A press's feedback, the other buttons' highlighted title colour (the web's hover colour)
+- (void)setHighlighted:(BOOL)highlighted {
+    [super setHighlighted:highlighted];
+    glyph.textColor = highlighted ? [UIColor colorWithRed:0xcc/255.0 green:0xcc/255.0 blue:1 alpha:1] : glyphColor;
+}
+
+- (void)setFaceFrame:(CGRect)rect {
+    face.frame = rect;
+    face.layer.cornerRadius = 8;
+    glyph.frame = face.bounds;
+}
+
+- (void)setTargetCircleCenter:(CGPoint)center radius:(double)radius {
+    circleCenter = center;
+    circleRadius = radius;
+}
+
+- (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
+    if (![super pointInside:point withEvent:event]) {
+        return NO;
+    }
+    return circleRadius <= 0 || hypot(point.x - circleCenter.x, point.y - circleCenter.y) < circleRadius;
+}
+
+@end
+
 static void styleButton(UIButton *button, UIColor *background, UIColor *border, UIColor *text) {
+    if ([button isKindOfClass:[EOPairButton class]]) {
+        EOPairButton *pair = (EOPairButton *)button;
+        pair.face.backgroundColor = background;
+        pair.face.layer.borderColor = border.CGColor;
+        [pair setGlyphColor:text];
+        return;
+    }
     button.backgroundColor = background;
     button.layer.borderColor = border.CGColor;
     [button setTitleColor:text forState:UIControlStateNormal];
@@ -630,8 +718,14 @@ static void styleAsFrame(UIView *view) {
         [bodyRing release];
         stepLabel = [self addLabelTo:stepBlock font:[UIFont fontWithName:@"Arial-BoldMT" size:14] color:rgb(0xcc, 0xcc, 0xdd)];
         UIFont *pairFont = [UIFont systemFontOfSize:22];
-        backButton = [self addButtonTo:stepBlock title:@"◀" font:pairFont];
-        forwardButton = [self addButtonTo:stepBlock title:@"▶" font:pairFont];
+        backButton = [EOPairButton buttonWithType:UIButtonTypeCustom];
+        forwardButton = [EOPairButton buttonWithType:UIButtonTypeCustom];
+        [(EOPairButton *)backButton setGlyph:@"◀" font:pairFont];
+        [(EOPairButton *)forwardButton setGlyph:@"▶" font:pairFont];
+        backButton.accessibilityLabel = @"◀";
+        forwardButton.accessibilityLabel = @"▶";
+        [stepBlock addSubview:backButton];
+        [stepBlock addSubview:forwardButton];
         styleAsPlain(backButton);
         styleAsPlain(forwardButton);
         for (UIButton *button in [NSArray arrayWithObjects:backButton, forwardButton, nil]) {
@@ -772,9 +866,28 @@ static void styleAsFrame(UIView *view) {
     double pairWidth = 0.78 * r - gap / 2;
     double pairHeight = 0.95 * r;
     double pairTop = c.y - 0.3 * r;
-    backButton.frame = CGRectMake(c.x - 0.78 * r, pairTop, pairWidth, pairHeight);
-    forwardButton.frame = CGRectMake(c.x + gap / 2, pairTop, pairWidth, pairHeight);
+    CGRect backFace = CGRectMake(c.x - 0.78 * r, pairTop, pairWidth, pairHeight);
+    CGRect forwardFace = CGRectMake(c.x + gap / 2, pairTop, pairWidth, pairHeight);
     padlock.frame = CGRectMake(c.x - r, pairTop, 2 * r, pairHeight);
+
+    // The targets, larger than the faces.  Without the body dial: each its half of the whole block, edge to
+    // edge and top to bottom.  With it: each its half of the circle inside the dial's band, which takes
+    // the touches beyond, so that no touch falls between the two.
+    EOPairButton *back = (EOPairButton *)backButton;
+    EOPairButton *forward = (EOPairButton *)forwardButton;
+    if (!ringShown) {
+        back.frame = CGRectMake(0, 0, w / 2, h);
+        forward.frame = CGRectMake(w / 2, 0, w / 2, h);
+        [back setTargetCircleCenter:CGPointZero radius:0];
+        [forward setTargetCircleCenter:CGPointZero radius:0];
+    } else {
+        back.frame = CGRectMake(c.x - r, c.y - r, r, 2 * r);
+        forward.frame = CGRectMake(c.x, c.y - r, r, 2 * r);
+        [back setTargetCircleCenter:CGPointMake(r, r) radius:r];
+        [forward setTargetCircleCenter:CGPointMake(0, r) radius:r];
+    }
+    [back setFaceFrame:CGRectOffset(backFace, -back.frame.origin.x, -back.frame.origin.y)];
+    [forward setFaceFrame:CGRectOffset(forwardFace, -forward.frame.origin.x, -forward.frame.origin.y)];
 }
 
 // The wheels centred in the space left of the buttons; the keyboard button where Now goes while closed
