@@ -32,6 +32,8 @@ static const double frameShadowOpacity = 0.6;
 static const NSTimeInterval growDuration = 0.65;
 static const double growDamping = 0.72;
 static const NSTimeInterval shrinkDuration = 0.5;
+static const double vanishStart = 0.8;          // a shrinking view fades out from this fraction of its travel...
+static const double vanishEnd = 0.95;           // ...and is gone by this one, before it is a speck under Set / Done
 static const double buttonRadius = 8;
 static const double gap = 4;
 static const double wheelGap = 4;               // between the wheels of a group
@@ -692,13 +694,35 @@ static CGAffineTransform transformOnto(UIView *view, CGRect rect) {
     return CGAffineTransformScale(t, rect.size.width / size.width, rect.size.height / size.height);
 }
 
+// Each frame of the shrink: a view fades out over the last of its travel, by how far it has shrunk rather
+// than by time (the spring covers most of the distance early), as the picker's magnifier and label do
+- (void)shrinkStep:(CADisplayLink *)link {
+    for (UIView *view in [self openingViews]) {
+        CALayer *layer = view.layer.presentationLayer;
+        if (!layer) {
+            continue;
+        }
+        double end = transformOnto(view, shrinkTarget).a;
+        double progress = end < 1 ? (1 - layer.transform.m11) / (1 - end) : 1;
+        view.alpha = fmin(fmax((vanishEnd - progress) / (vanishEnd - vanishStart), 0), 1);
+    }
+}
+
+- (void)stopShrinkFade {
+    [shrinkLink invalidate];    // it retains us until then
+    shrinkLink = nil;
+}
+
 - (void)setOpen:(bool)isOpen fromRect:(CGRect)source {
     open = isOpen;
     NSArray *views = [self openingViews];
     bool animate = self.window && !UIAccessibilityIsReduceMotionEnabled();
     if (open) {
+        [self stopShrinkFade];
+        faded = false;
         [self refresh];
         for (UIView *view in views) {
+            view.alpha = 1;
             if (animate && view.hidden) {
                 view.transform = transformOnto(view, source);
             }
@@ -725,15 +749,21 @@ static CGAffineTransform transformOnto(UIView *view, CGRect rect) {
         if (open) {
             return;
         }
+        [self stopShrinkFade];
         for (UIView *view in views) {
             view.hidden = YES;
             view.transform = CGAffineTransformIdentity;
+            view.alpha = 1;
         }
     };
     if (!animate) {
         done(YES);
         return;
     }
+    shrinkTarget = source;
+    [self stopShrinkFade];
+    shrinkLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(shrinkStep:)];
+    [shrinkLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
     [UIView animateWithDuration:shrinkDuration delay:0 usingSpringWithDamping:1 initialSpringVelocity:0
                         options:UIViewAnimationOptionBeginFromCurrentState animations:^{
         for (UIView *view in views) {
