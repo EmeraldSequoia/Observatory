@@ -18,7 +18,6 @@ static const double portraitBlockHeight = 130;
 static const double landscapeBlockWidth = 170;
 static const double landscapeBlockHeight = 215;
 static const double blockPad = 8;
-static const double labelHeight = 18;           // the pair's label
 static const double statusHeight = 30;          // the status over Now: two lines, for a scrub at the limit
 // The blocks' and the odometer's frame, as the location picker's large map has it: black, a gray border
 // (EOClock's header box), a shadow
@@ -174,6 +173,67 @@ static void drawTicks(CGContextRef context, CGPoint c, int n, double r1, double 
     CGContextStrokePath(context);
 }
 
+// A ship's engine order telegraph's handle, framing a dial's selected position: in its own frame, x out
+// along that position's radius, a wedge narrow at the hub, its sides reaching the rim halfway between the full
+// tick midway to each neighbour and the half tick before it, its end following the rim, its corners rounded;
+// and a stem back to the hub it turns on.  Drawn in outline, so the selection shows through.  With a start
+// radius, the wedge begins there instead, with no stem: where the dial's middle is taken by other things.
+static void drawHandle(CGContextRef context, CGPoint c, double angle, double rim, double hubR, double step, UIColor *color, double start) {
+    bool stem = (start == 0);
+    double inner = stem ? hubR * 1.8 : start;
+    double outer = rim - 0.5;
+    double innerHalf = hubR * 0.35;
+    double spread = 3.5 / 8 * step;     // the full tick is at 4/8 of a step from a position, the half tick at 3/8
+    double corner = 3.5;                // the rounding where the sides meet the rim
+    double cornerAngle = corner / outer;
+    CGPoint first = CGPointMake(outer * cos(spread), -outer * sin(spread));
+    CGPoint second = CGPointMake(outer * cos(spread), outer * sin(spread));
+    CGMutablePathRef loop = CGPathCreateMutable();
+    CGPathMoveToPoint(loop, NULL, inner, -innerHalf);
+    // Each corner turns from the side onto the rim's tangent there, and the end follows the rim between them
+    CGPathAddArcToPoint(loop, NULL, first.x, first.y, first.x + sin(spread), first.y + cos(spread), corner);
+    CGPathAddArc(loop, NULL, 0, 0, outer, -spread + cornerAngle, spread - cornerAngle, false);
+    CGPathAddArcToPoint(loop, NULL, second.x, second.y, inner, innerHalf, corner);
+    CGPathAddLineToPoint(loop, NULL, inner, innerHalf);
+    CGPathAddArc(loop, NULL, inner, 0, innerHalf, M_PI / 2, 3 * M_PI / 2, false);
+    CGPathCloseSubpath(loop);
+    CGContextSaveGState(context);
+    CGContextTranslateCTM(context, c.x, c.y);
+    CGContextRotateCTM(context, angle - M_PI / 2);
+    CGContextSetStrokeColorWithColor(context, color.CGColor);
+    CGContextSetLineJoin(context, kCGLineJoinRound);
+    CGContextSetLineWidth(context, 2);
+    CGContextAddPath(context, loop);
+    CGContextStrokePath(context);
+    if (stem) {
+        CGContextMoveToPoint(context, 0, 0);
+        CGContextAddLineToPoint(context, inner - innerHalf, 0);
+        CGContextStrokePath(context);
+    }
+    CGContextRestoreGState(context);
+    CGPathRelease(loop);
+}
+
+// The graduations around a dial of n positions, eight to a gap but none within clear (an angle) of a
+// position: full ticks midway between them, half ticks at the quarters, short ones between
+static void drawGraduations(CGContextRef context, CGPoint c, int n, double rim, double band, double clear) {
+    double step = 2 * M_PI / n;
+    CGContextSetStrokeColorWithColor(context, [UIColor lightGrayColor].CGColor);
+    for (int k = 0; k < n * 8; k++) {
+        int sub = k % 8;
+        double a = k * step / 8;
+        double fromPosition = fmin(sub, 8 - sub) * step / 8;
+        if (fromPosition < clear) {
+            continue;
+        }
+        double length = (sub == 4) ? band : ((sub % 2 == 0) ? band * 0.6 : band * 0.35);
+        CGContextSetLineWidth(context, sub == 4 ? 1.2 : 0.8);
+        CGContextMoveToPoint(context, c.x + (rim - length) * sin(a), c.y - (rim - length) * cos(a));
+        CGContextAddLineToPoint(context, c.x + rim * sin(a), c.y - rim * cos(a));
+        CGContextStrokePath(context);
+    }
+}
+
 // After the Moon azimuth dial, simplified: a line around the rim with the graduations inside it, and faint
 // spokes from a small hub.  The positions' words, full and capitalized, in the azimuth dial's Arial, lie
 // radially out to the rim, the calendar units reading out from the centre and the astronomical events in
@@ -212,23 +272,8 @@ static void drawTicks(CGContextRef context, CGPoint c, int n, double r1, double 
     // Spokes between the positions, as the azimuth dial's between its compass points
     drawTicks(context, c, EOTimeStepNumUnits, hubR, rim - band, 1, [UIColor colorWithRed:0.3 green:0.3 blue:0.9 alpha:0.35], 0.5);
 
-    // The graduations, eight to a gap but none where a word crosses them: full ticks midway between the
-    // words, half ticks at the quarters, short ones between
-    double clear = (font.lineHeight / 2 + 1.5) / (rim - band);     // a word's half-width there, as an angle
-    CGContextSetStrokeColorWithColor(context, [UIColor lightGrayColor].CGColor);
-    for (int k = 0; k < EOTimeStepNumUnits * 8; k++) {
-        int sub = k % 8;
-        double a = k * step / 8;
-        double fromWord = fmin(sub, 8 - sub) * step / 8;
-        if (fromWord < clear) {
-            continue;
-        }
-        double length = (sub == 4) ? band : ((sub % 2 == 0) ? band * 0.6 : band * 0.35);
-        CGContextSetLineWidth(context, sub == 4 ? 1.2 : 0.8);
-        CGContextMoveToPoint(context, c.x + (rim - length) * sin(a), c.y - (rim - length) * cos(a));
-        CGContextAddLineToPoint(context, c.x + rim * sin(a), c.y - rim * cos(a));
-        CGContextStrokePath(context);
-    }
+    // The graduations between the words, none where a word crosses them
+    drawGraduations(context, c, EOTimeStepNumUnits, rim, band, (font.lineHeight / 2 + 1.5) / (rim - band));
 
     UIColor *white = [UIColor colorWithWhite:1 alpha:0.85];
     UIColor *blue = [UIColor colorWithRed:0.65 green:0.75 blue:1 alpha:0.9];
@@ -252,40 +297,9 @@ static void drawTicks(CGContextRef context, CGPoint c, int n, double r1, double 
         CGContextRestoreGState(context);
     }
 
-    // The handle, always the same: in its own frame, x out along the selected position's radius.  A wedge
-    // narrow at the hub, its sides reaching the rim halfway between the full tick midway to each neighbour and
-    // the half tick before it, its end following the rim, its corners rounded; and a stem back to the hub.
-    double inner = hubR * 1.8;
-    double outer = rim - 0.5;
-    double innerHalf = hubR * 0.35;
-    double spread = 3.5 / 8 * step;     // the full tick is at 4/8 of a step from a word, the half tick at 3/8
-    double corner = 3.5;                // the rounding where the sides meet the rim
-    double cornerAngle = corner / outer;
-    CGPoint first = CGPointMake(outer * cos(spread), -outer * sin(spread));
-    CGPoint second = CGPointMake(outer * cos(spread), outer * sin(spread));
-    CGMutablePathRef loop = CGPathCreateMutable();
-    CGPathMoveToPoint(loop, NULL, inner, -innerHalf);
-    // Each corner turns from the side onto the rim's tangent there, and the end follows the rim between them
-    CGPathAddArcToPoint(loop, NULL, first.x, first.y, first.x + sin(spread), first.y + cos(spread), corner);
-    CGPathAddArc(loop, NULL, 0, 0, outer, -spread + cornerAngle, spread - cornerAngle, false);
-    CGPathAddArcToPoint(loop, NULL, second.x, second.y, inner, innerHalf, corner);
-    CGPathAddLineToPoint(loop, NULL, inner, innerHalf);
-    CGPathAddArc(loop, NULL, inner, 0, innerHalf, M_PI / 2, 3 * M_PI / 2, false);
-    CGPathCloseSubpath(loop);
-    CGContextSaveGState(context);
-    CGContextTranslateCTM(context, c.x, c.y);
-    CGContextRotateCTM(context, unit * step - M_PI / 2);
+    // The handle, always the same, framing the selected word
     UIColor *gold = [UIColor colorWithRed:1 green:0xc1/256.0 blue:0x25/256.0 alpha:1];      // the clock's minute hand
-    CGContextSetStrokeColorWithColor(context, gold.CGColor);
-    CGContextSetLineJoin(context, kCGLineJoinRound);
-    CGContextSetLineWidth(context, 2);
-    CGContextAddPath(context, loop);
-    CGContextStrokePath(context);
-    CGContextMoveToPoint(context, 0, 0);
-    CGContextAddLineToPoint(context, inner - innerHalf, 0);
-    CGContextStrokePath(context);
-    CGContextRestoreGState(context);
-    CGPathRelease(loop);
+    drawHandle(context, c, unit * step, rim, hubR, step, gold, 0);
 
     // The hub the handle turns on
     CGContextSetLineWidth(context, 1);
@@ -316,12 +330,10 @@ static void drawTicks(CGContextRef context, CGPoint c, int n, double r1, double 
 
 @end
 
-//// The body ring, for rise / set / transit: the bodies' symbols in a horseshoe around the pair, open at the top
-//// for its label, from the Sun at the upper left down and around to Neptune at the upper right.  A tap on a
-//// symbol picks that body; the middle is the pair's, and takes no touches.
-
-static const double ringFirstAngle = 320;       // degrees clockwise from the top: the Sun
-static const double ringSpacing = 35;           // between neighbours, so the nine span 280 degrees
+//// The body dial, for rise / set / transit: as large as the mode dial, a line around the rim with graduations
+//// between the bodies' symbols, which are spread evenly around it clockwise from the Sun at the top, and the
+//// same telegraph handle framing the selected one, across the band only.  A touch on the symbols' band picks the nearest, and a drag
+//// around it keeps picking; the middle is the pair's, and takes no touches.
 
 static NSString *symbolForBody(int planet) {
     switch (planet) {
@@ -344,8 +356,6 @@ static NSString *symbolForBody(int planet) {
 }
 - (id)initWithController:(EOTimeControllerView *)aController;
 - (void)setBody:(int)planetNumber;
-- (double)symbolSize;
-- (double)symbolRadius;
 - (double)innerRadius;                  // inside the symbols: the pair's room
 @end
 
@@ -367,79 +377,88 @@ static NSString *symbolForBody(int planet) {
     [self setNeedsDisplay];
 }
 
-- (CGPoint)center_ {
+- (CGPoint)hub {
     return CGPointMake(self.bounds.size.width / 2, self.bounds.size.height / 2);
 }
 
+- (double)rimRadius {
+    return fmin(self.bounds.size.width, self.bounds.size.height) / 2 - 1;     // as the mode dial's
+}
+
 - (double)symbolSize {
-    return fmin(self.bounds.size.width, self.bounds.size.height) * 0.125;
+    return [self rimRadius] * 0.24;
 }
 
 - (double)symbolRadius {
-    return fmin(self.bounds.size.width, self.bounds.size.height) / 2 - [self symbolSize] * 0.75;
+    return [self rimRadius] - [self symbolSize] * 0.75;
 }
 
 - (double)innerRadius {
-    return [self symbolRadius] - [self symbolSize] * 0.8;
-}
-
-static CGPoint ringPoint(CGPoint c, double r, double degrees) {
-    return CGPointMake(c.x + r * sin(degrees * M_PI / 180), c.y - r * cos(degrees * M_PI / 180));
+    return [self symbolRadius] - [self symbolSize] * 0.65;
 }
 
 - (void)drawRect:(CGRect)rect {
-    CGPoint c = [self center_];
+    CGContextRef context = UIGraphicsGetCurrentContext();
+    CGPoint c = [self hub];
+    double rim = [self rimRadius];
     double r = [self symbolRadius];
     double size = [self symbolSize];
+    int n = [EOTimeStepper numBodies];
+    double step = 2 * M_PI / n;
 
-    // The track the symbols sit on, around the bottom
-    UIBezierPath *track = [UIBezierPath bezierPathWithArcCenter:c radius:r startAngle:(ringFirstAngle - 90) * M_PI / 180
-                                                       endAngle:(ringFirstAngle - 90 - ringSpacing * ([EOTimeStepper numBodies] - 1)) * M_PI / 180 clockwise:NO];
-    track.lineWidth = 1;
-    [rgb(0x3a, 0x3a, 0x5e) setStroke];
-    [track stroke];
+    CGContextSetLineWidth(context, 0.5);
+    CGContextSetRGBStrokeColor(context, 1, 1, 1, 0.6);
+    CGContextAddArc(context, c.x, c.y, rim, 0, 2 * M_PI, 0);
+    CGContextStrokePath(context);
+    drawGraduations(context, c, n, rim, rim * 0.17, (size * 0.6 + 1.5) / r);
 
-    for (int i = 0; i < [EOTimeStepper numBodies]; i++) {
-        int planet = [EOTimeStepper bodyAtIndex:i];
-        CGPoint p = ringPoint(c, r, ringFirstAngle - i * ringSpacing);
-        bool selected = (planet == body);
-        UIBezierPath *disc = [UIBezierPath bezierPathWithArcCenter:p radius:size * 0.72 startAngle:0 endAngle:2 * M_PI clockwise:YES];
-        [(selected ? rgb(0x2a, 0x2a, 0x3e) : [UIColor blackColor]) setFill];
-        [disc fill];
-        if (selected) {
-            disc.lineWidth = 1.5;
-            [rgb(0x88, 0xaa, 0xff) setStroke];
-            [disc stroke];
-        }
-        NSString *symbol = symbolForBody(planet);
-        NSDictionary *attributes = [NSDictionary dictionaryWithObjectsAndKeys:[UIFont systemFontOfSize:size], NSFontAttributeName,
-                                                 (selected ? rgb(0xcc, 0xcc, 0xff) : rgb(0x99, 0x99, 0xbb)), NSForegroundColorAttributeName, nil];
+    UIFont *font = [UIFont systemFontOfSize:size];
+    for (int i = 0; i < n; i++) {
+        double a = i * step;
+        CGPoint p = CGPointMake(c.x + r * sin(a), c.y - r * cos(a));
+        NSString *symbol = symbolForBody([EOTimeStepper bodyAtIndex:i]);
+        NSDictionary *attributes = [NSDictionary dictionaryWithObjectsAndKeys:font, NSFontAttributeName,
+                                                 [UIColor colorWithRed:0.65 green:0.75 blue:1 alpha:0.9], NSForegroundColorAttributeName, nil];
         CGSize extent = [symbol sizeWithAttributes:attributes];
         [symbol drawAtPoint:CGPointMake(p.x - extent.width / 2, p.y - extent.height / 2) withAttributes:attributes];
+    }
+
+    for (int i = 0; i < n; i++) {
+        if ([EOTimeStepper bodyAtIndex:i] == body) {
+            // From the band's inner edge only: the pair and its label have the middle
+            drawHandle(context, c, i * step, rim, rim * 0.1, step, [UIColor colorWithRed:1 green:0xc1/256.0 blue:0x25/256.0 alpha:1],
+                       [self innerRadius] - 2);
+        }
     }
 }
 
 // Only the band the symbols are in takes touches
 - (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
-    CGPoint c = [self center_];
+    CGPoint c = [self hub];
     double d = hypot(point.x - c.x, point.y - c.y);
-    return d >= [self innerRadius] && d <= [self symbolRadius] + [self symbolSize] && [super pointInside:point withEvent:event];
+    return d >= [self innerRadius] && [super pointInside:point withEvent:event];
 }
 
-- (void)touchesEnded:(NSSet *)touches withEvent:(UIEvent *)event {
-    CGPoint point = [[touches anyObject] locationInView:self];
-    CGPoint c = [self center_];
-    double angle = atan2(point.x - c.x, c.y - point.y) * 180 / M_PI;      // clockwise from the top
+- (void)selectAtPoint:(CGPoint)point {
+    CGPoint c = [self hub];
+    double angle = atan2(point.x - c.x, c.y - point.y);       // clockwise from the top
     if (angle < 0) {
-        angle += 360;
+        angle += 2 * M_PI;
     }
-    double last = ringFirstAngle - ringSpacing * ([EOTimeStepper numBodies] - 1);
-    if (angle < last - ringSpacing / 2 || angle > ringFirstAngle + ringSpacing / 2) {
-        return;     // the opening at the top
+    int n = [EOTimeStepper numBodies];
+    int i = (int)lround(angle / (2 * M_PI / n)) % n;
+    int planet = [EOTimeStepper bodyAtIndex:i];
+    if (planet != body) {
+        [controller ringSelectedBody:planet];
     }
-    int i = (int)lround((ringFirstAngle - angle) / ringSpacing);
-    i = i < 0 ? 0 : (i >= [EOTimeStepper numBodies] ? [EOTimeStepper numBodies] - 1 : i);
-    [controller ringSelectedBody:[EOTimeStepper bodyAtIndex:i]];
+}
+
+- (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
+    [self selectAtPoint:[[touches anyObject] locationInView:self]];
+}
+
+- (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event {
+    [self selectAtPoint:[[touches anyObject] locationInView:self]];
 }
 
 @end
@@ -707,39 +726,24 @@ static void styleAsFrame(UIView *view) {
     [self layoutStepBlock];
 }
 
-// The pair.  Without a body: its label on top, the two buttons side by side below, filling the block.  With
-// one: the body ring, as large as the block holds and at its foot, the buttons in the ring's middle and the
-// label above them (in the ring's opening, in a square block).
+// The pair, always the same size and in the same place whether the body dial shows or not: in the middle of
+// the dial's room (the mode dial's size, centred in the block), inside the symbols' band, with its label above
 - (void)layoutStepBlock {
     double w = landscape ? landscapeBlockWidth : portraitBlockWidth;
     double h = landscape ? landscapeBlockHeight : portraitBlockHeight;
-    double inner = w - 2 * blockPad;
-    bodyRing.hidden = !ringShown;
-    if (!ringShown) {
-        stepLabel.frame = CGRectMake(blockPad, blockPad, inner, labelHeight);
-        double pairTop = blockPad + labelHeight + gap;
-        double pairWidth = (inner - gap) / 2;
-        backButton.frame = CGRectMake(blockPad, pairTop, pairWidth, h - pairTop - blockPad);
-        forwardButton.frame = CGRectMake(blockPad + pairWidth + gap, pairTop, pairWidth, h - pairTop - blockPad);
-        padlock.frame = CGRectMake(0, pairTop, w, h - pairTop - blockPad);
-        return;
-    }
-    double side = fmin(inner, h - 2 * blockPad);
-    bodyRing.frame = CGRectMake((w - side) / 2, h - blockPad - side, side, side);
+    double side = fmin(w - 2 * blockPad, h - 2 * blockPad);
+    bodyRing.frame = CGRectMake((w - side) / 2, (h - side) / 2, side, side);
     [bodyRing setNeedsDisplay];
-    CGPoint c = CGPointMake(w / 2, h - blockPad - side / 2);
+    bodyRing.hidden = !ringShown;
+    CGPoint c = CGPointMake(w / 2, h / 2);
     double r = [bodyRing innerRadius];
-    if (h - side > labelHeight + 2 * blockPad) {
-        stepLabel.frame = CGRectMake(blockPad, blockPad, inner, labelHeight);
-    } else {
-        double chord = 1.3 * [bodyRing symbolRadius] * sin(ringSpacing * M_PI / 180 * 1.15);
-        stepLabel.frame = CGRectMake(c.x - chord, blockPad - 3, 2 * chord, labelHeight);
-    }
-    double pairWidth = 0.8 * r - gap / 2;
-    double pairHeight = 1.25 * r;
-    backButton.frame = CGRectMake(c.x - 0.8 * r, c.y - pairHeight / 2 + 0.1 * r, pairWidth, pairHeight);
-    forwardButton.frame = CGRectMake(c.x + gap / 2, c.y - pairHeight / 2 + 0.1 * r, pairWidth, pairHeight);
-    padlock.frame = CGRectMake(c.x - r, c.y - r, 2 * r, 2 * r);
+    stepLabel.frame = CGRectMake(c.x - 0.8 * r, c.y - 0.78 * r, 1.6 * r, 0.42 * r);
+    double pairWidth = 0.78 * r - gap / 2;
+    double pairHeight = 0.95 * r;
+    double pairTop = c.y - 0.3 * r;
+    backButton.frame = CGRectMake(c.x - 0.78 * r, pairTop, pairWidth, pairHeight);
+    forwardButton.frame = CGRectMake(c.x + gap / 2, pairTop, pairWidth, pairHeight);
+    padlock.frame = CGRectMake(c.x - r, pairTop, 2 * r, pairHeight);
 }
 
 // The wheels centred in the space left of the buttons; the keyboard button where Now goes while closed

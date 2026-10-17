@@ -584,7 +584,12 @@ BOOL timeChanged = false;
     demoBut.hidden = false;
     [view bringSubviewToFront:demoBut];
 #endif
-    [resetBut setTitle:NSLocalizedString(@"Done", @"Done") forState:UIControlStateNormal];
+    // Set becomes the location picker's close button, a white ⓧ, where Set was
+    [resetBut setTitle:nil forState:UIControlStateNormal];
+    [resetBut setImage:[UIImage systemImageNamed:@"xmark.circle.fill" withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:30]]
+	      forState:UIControlStateNormal];
+    resetBut.tintColor = [UIColor whiteColor];
+    resetBut.accessibilityLabel = NSLocalizedString(@"Done", @"Done");
     [self updateNowButton];
     [self updateTimeStripVisibility];
 }
@@ -597,7 +602,9 @@ BOOL timeChanged = false;
     setMode = false;
     [timePanel setOpen:false fromRect:resetBut.frame];
     demoBut.hidden = true;
+    [resetBut setImage:nil forState:UIControlStateNormal];
     [resetBut setTitle:NSLocalizedString(@"Set", @"Set (verb)") forState:UIControlStateNormal];
+    resetBut.accessibilityLabel = nil;
     // The eclipse demo (debug builds) borrows the location and time zone; closing the controller gives them back
     demoCycle = 0;
     if (demoLng != 0) {

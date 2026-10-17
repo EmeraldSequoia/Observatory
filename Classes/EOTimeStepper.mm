@@ -157,9 +157,23 @@ static const int numBodies = sizeof(bodyPlanets) / sizeof(bodyPlanets[0]);
         return [NSString stringWithFormat:NSLocalizedString(@"%@ transit", @"the pair's label: step to a body's meridian crossing, e.g. 'Jupiter transit'"), bodyName];
       case EOTimeStepPhase:
         return NSLocalizedString(@"Moon phase", @"the pair's label: step to the Moon's next quarter");
+      case EOTimeStepCentury:
+        return NSLocalizedString(@"1 century", @"the pair's label: step by one century");
+      case EOTimeStepYear:
+        return NSLocalizedString(@"1 year", @"the pair's label: step by one year");
+      case EOTimeStepMonth:
+        return NSLocalizedString(@"1 month", @"the pair's label: step by one month");
+      case EOTimeStepDay:
+        return NSLocalizedString(@"1 day", @"the pair's label: step by one day");
+      case EOTimeStepHour:
+        return NSLocalizedString(@"1 hour", @"the pair's label: step by one hour");
+      case EOTimeStepMinute:
+        return NSLocalizedString(@"1 minute", @"the pair's label: step by one minute");
+      case EOTimeStepSecond:
+        return NSLocalizedString(@"1 second", @"the pair's label: step by one second");
       default:
-        return [NSString stringWithFormat:NSLocalizedString(@"1 %@", @"the pair's label: one unit, e.g. '1 day' (%@ is the unit abbreviation)"),
-                         [EOTimeStepper labelForUnit:unit]];
+        ESAssert(false);
+        return @"";
     }
 }
 
