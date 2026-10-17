@@ -174,8 +174,8 @@ static void drawTicks(CGContextRef context, CGPoint c, int n, double r1, double 
     CGContextStrokePath(context);
 }
 
-// After the Moon azimuth dial: a translucent band around the rim carrying the graduations, faint spokes from a
-// small hub, and a hand.  The positions' words, full and capitalized, in the location picker's Hoefler Text,
+// After the Moon azimuth dial, simplified: a line around the rim with the graduations inside it, faint spokes
+// from a small hub, and a hand.  The positions' words, full and capitalized, in the location picker's Hoefler Text,
 // lie radially out to the rim, reading out from the centre on the right and in toward it on the left; the
 // graduations fill the band between them, and the hand points at the selected word, which is in gold.
 - (void)drawRect:(CGRect)rect {
@@ -203,18 +203,16 @@ static void drawTicks(CGContextRef context, CGPoint c, int n, double r1, double 
         size -= 0.25;
     } while (widest > wordsOuter - wordsInner && size > 5);
 
-    // The band
+    // The rim: a single line, the graduations inside it
     CGContextSetLineWidth(context, 0.5);
     CGContextSetRGBStrokeColor(context, 1, 1, 1, 0.6);
-    CGContextSetRGBFillColor(context, 1, 1, 1, 0.15);
     CGContextAddArc(context, c.x, c.y, rim, 0, 2 * M_PI, 0);
-    CGContextAddArc(context, c.x, c.y, rim - band, 0, 2 * M_PI, 0);
-    CGContextDrawPath(context, kCGPathEOFillStroke);
+    CGContextStrokePath(context);
 
     // Spokes between the positions, as the azimuth dial's between its compass points
     drawTicks(context, c, EOTimeStepNumUnits, hubR, rim - band, 1, [UIColor colorWithRed:0.3 green:0.3 blue:0.9 alpha:0.35], 0.5);
 
-    // The graduations, eight to a gap but none where a word crosses the band: full ticks midway between the
+    // The graduations, eight to a gap but none where a word crosses them: full ticks midway between the
     // words, half ticks at the quarters, short ones between
     double clear = (font.lineHeight / 2 + 1.5) / (rim - band);     // a word's half-width there, as an angle
     CGContextSetStrokeColorWithColor(context, [UIColor lightGrayColor].CGColor);
