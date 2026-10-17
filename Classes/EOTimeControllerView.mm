@@ -175,7 +175,7 @@ static void drawTicks(CGContextRef context, CGPoint c, int n, double r1, double 
 }
 
 // After the Moon azimuth dial, simplified: a line around the rim with the graduations inside it, faint spokes
-// from a small hub, and a hand.  The positions' words, full and capitalized, in the location picker's Hoefler Text,
+// from a small hub, and a hand.  The positions' words, full and capitalized, in the azimuth dial's Arial,
 // lie radially out to the rim, the calendar units reading out from the centre and the astronomical events in
 // toward it; the graduations fill the gaps between them, and the hand points at the selected word, in gold.
 - (void)drawRect:(CGRect)rect {
@@ -193,8 +193,8 @@ static void drawTicks(CGContextRef context, CGPoint c, int n, double r1, double 
     UIFont *font, *bold;
     double widest;
     do {
-        font = [UIFont fontWithName:@"HoeflerText-Regular" size:size];
-        bold = [UIFont fontWithName:@"HoeflerText-Black" size:size];
+        font = [UIFont fontWithName:@"Arial" size:size];
+        bold = [UIFont fontWithName:@"Arial-BoldMT" size:size];
         widest = 0;
         for (int i = 0; i < EOTimeStepNumUnits; i++) {
             UIFont *f = (i == unit) ? bold : font;
