@@ -131,6 +131,11 @@ static void setFieldText(UITextField *field, NSString *text) {
     field.placeholder = placeholder;
     field.keyboardType = UIKeyboardTypeNumberPad;
     field.keyboardAppearance = UIKeyboardAppearanceDark;
+    // iPadOS 26's number-pad popover appears only some of the time, ignores the dark appearance (white
+    // keys on white) and covers the panel: the docked keyboard, always
+    if (@available(iOS 26.0, *)) {
+        field.allowsNumberPadPopover = NO;
+    }
     field.returnKeyType = UIReturnKeyDone;
     field.autocorrectionType = UITextAutocorrectionTypeNo;
     field.delegate = self;
