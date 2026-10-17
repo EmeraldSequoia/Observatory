@@ -83,22 +83,36 @@ static void styleAsEra(UIButton *button, bool bce) {     // the web's #tp-bce, a
     }
 }
 
-// A wheel's two looks.  Rolling: a drum, shaded dark toward its top and bottom edges (the gradient is the
-// field's first sublayer, under its text).  Typing, while the keyboard switch is on: a plain light field.
-static void styleWheel(UITextField *field, bool typing) {
-    CALayer *drum = [field.layer.sublayers objectAtIndex:0];
-    drum.hidden = typing;
+// A wheel's drum shading: the sublayer of its field named for it (found by name: the field adds sublayers of
+// its own, ahead of it, as it lays out and edits)
+static NSString * const drumLayerName = @"EODrum";
+
+static CALayer *drumOf(UITextField *field) {
+    for (CALayer *layer in field.layer.sublayers) {
+        if ([layer.name isEqualToString:drumLayerName]) {
+            return layer;
+        }
+    }
+    return nil;
+}
+
+// A wheel's looks.  Rolling: a thumbwheel's drum, a cylinder shaded dark toward its top and bottom edges and
+// lit across the middle, under the digits; while a drag rolls it, a bold gold rim.  Typing, while the keyboard
+// switch is on: a plain white field.
+static void styleWheel(UITextField *field, bool typing, bool dragging) {
+    drumOf(field).hidden = typing;
     if (typing) {
-        field.backgroundColor = rgb(0xee, 0xee, 0xf4);
+        field.backgroundColor = [UIColor whiteColor];
         field.textColor = rgb(0x11, 0x11, 0x22);
         field.layer.borderWidth = 2;
         field.layer.borderColor = rgb(0x88, 0xaa, 0xff).CGColor;
         field.layer.cornerRadius = 4;
     } else {
-        field.backgroundColor = rgb(0x30, 0x30, 0x40);
-        field.textColor = rgb(0xee, 0xee, 0xee);
-        field.layer.borderWidth = 0;
-        field.layer.cornerRadius = 2;
+        field.backgroundColor = rgb(0x5a, 0x5a, 0x6a);
+        field.textColor = [UIColor whiteColor];
+        field.layer.borderWidth = dragging ? 2.5 : 1;
+        field.layer.borderColor = dragging ? [UIColor colorWithRed:1 green:0xc1/256.0 blue:0x25/256.0 alpha:1].CGColor : rgb(0x22, 0x22, 0x2a).CGColor;
+        field.layer.cornerRadius = 3;
     }
 }
 
@@ -522,12 +536,14 @@ static void styleAsFrame(UIView *view) {
     field.textAlignment = NSTextAlignmentCenter;
     field.clipsToBounds = YES;
     CAGradientLayer *drum = [CAGradientLayer layer];
-    drum.colors = [NSArray arrayWithObjects:(id)[UIColor colorWithWhite:0 alpha:0.75].CGColor, (id)[UIColor colorWithWhite:0 alpha:0].CGColor,
-                                            (id)[UIColor colorWithWhite:0 alpha:0].CGColor, (id)[UIColor colorWithWhite:0 alpha:0.75].CGColor, nil];
-    drum.locations = [NSArray arrayWithObjects:[NSNumber numberWithDouble:0], [NSNumber numberWithDouble:0.35],
-                                               [NSNumber numberWithDouble:0.65], [NSNumber numberWithDouble:1], nil];
+    drum.name = drumLayerName;
+    drum.colors = [NSArray arrayWithObjects:(id)[UIColor colorWithWhite:0 alpha:0.92].CGColor, (id)[UIColor colorWithWhite:0 alpha:0.35].CGColor,
+                                            (id)[UIColor colorWithWhite:1 alpha:0.12].CGColor,
+                                            (id)[UIColor colorWithWhite:0 alpha:0.35].CGColor, (id)[UIColor colorWithWhite:0 alpha:0.92].CGColor, nil];
+    drum.locations = [NSArray arrayWithObjects:[NSNumber numberWithDouble:0], [NSNumber numberWithDouble:0.28], [NSNumber numberWithDouble:0.5],
+                                               [NSNumber numberWithDouble:0.72], [NSNumber numberWithDouble:1], nil];
     [field.layer insertSublayer:drum atIndex:0];
-    styleWheel(field, false);
+    styleWheel(field, false, false);
     field.placeholder = placeholder;
     field.keyboardType = UIKeyboardTypeNumberPad;
     field.keyboardAppearance = UIKeyboardAppearanceDark;
@@ -779,7 +795,7 @@ static void styleAsFrame(UIView *view) {
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     for (UITextField *field in [NSArray arrayWithObjects:yearField, monthField, dayField, hourField, minuteField, secondField, nil]) {
-        [[field.layer.sublayers objectAtIndex:0] setFrame:field.bounds];
+        drumOf(field).frame = field.bounds;
     }
     [CATransaction commit];
     keyboardButton.frame = CGRectMake(wheelsWidth + 4, y, 69, height);
@@ -975,10 +991,15 @@ static CGAffineTransform transformOnto(UIView *view, CGRect rect) {
     return fabs(velocity.y) > fabs(velocity.x);
 }
 
-// Up rolls the wheel on, down rolls it back, a unit per notch of travel
+// Up rolls the wheel on, down rolls it back, a unit per notch of travel; the wheel wears a gold rim while it rolls
 - (void)wheelPanned:(UIPanGestureRecognizer *)recognizer {
+    UITextField *wheel = (UITextField *)recognizer.view;
     if (recognizer.state == UIGestureRecognizerStateBegan) {
         rollCarry = 0;
+        styleWheel(wheel, false, true);
+    } else if (recognizer.state != UIGestureRecognizerStateChanged) {
+        styleWheel(wheel, entering, false);     // ended, cancelled or failed
+        return;
     }
     rollCarry -= [recognizer translationInView:recognizer.view].y;
     [recognizer setTranslation:CGPointZero inView:recognizer.view];
@@ -1006,7 +1027,7 @@ static CGAffineTransform transformOnto(UIView *view, CGRect rect) {
     }
     entering = on;
     for (UITextField *field in [NSArray arrayWithObjects:yearField, monthField, dayField, hourField, minuteField, secondField, nil]) {
-        styleWheel(field, on);
+        styleWheel(field, on, false);
     }
     if (on) {
         styleAsActive(keyboardButton);
