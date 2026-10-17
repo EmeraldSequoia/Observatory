@@ -2,13 +2,13 @@
 //  EOTimeControllerView.h
 //  Emerald Observatory
 //
-//  The time controller: four blocks that cover the four small dials while Set mode is open (Now,
-//  the drive ◀ ‖ ▶, the mode dial with its body, and the ◀ ▶ pair: tap to step, hold to scrub,
-//  lift off to run hands-free), and the odometer along the top, which replaces the old strip:
-//  wheels for the displayed date and time, rolled by a drag or typed into, over a line with the
-//  clock's status, its distance from the present, the zone and the location.  The odometer shows
-//  whenever the strip did (EOClock's timeStripVisible), open or not; it takes touches only while
-//  the controller is open.
+//  The time controller: four blocks that cover the four small dials while Set mode is open (the
+//  clock's status over Now, the drive ◀ ‖ ▶, the mode dial with its body, and the ◀ ▶ pair: tap to
+//  step, hold to scrub, lift off to run hands-free), and the odometer along the top, which replaces
+//  the old strip: wheels for the displayed date and time, each rolled by a vertical drag, and a
+//  keyboard button that makes them typeable until the entry ends.  The odometer shows whenever the
+//  strip did (EOClock's timeStripVisible), open or not; it takes touches only while the controller
+//  is open.
 //
 //  The view itself spans the canvas and takes no touches; EOClock places its blocks where the
 //  dials are and its odometer where the strip goes (moveClockWidgetsForOrientation:), with
@@ -24,21 +24,21 @@
 @class EOClock;
 @class EOTimeModeDial;
 
-// The odometer, in canvas units: the wheels' line, then the info line, with EOOdometerButtonsWidth kept
-// clear at the first line's right end for EOClock's Set / Done and Now
+// The odometer, in canvas units: one line of wheels, with EOOdometerButtonsWidth kept clear at its right
+// end for EOClock's Set / Done and, beside it, Now (closed) or the keyboard button (open)
 static const double EOOdometerWidth = 460;
-static const double EOOdometerHeight = 52;
-static const double EOOdometerRowHeight = 34;
+static const double EOOdometerHeight = 38;
 static const double EOOdometerButtonsWidth = 154;
 
 @interface EOTimeControllerView : UIView <UIGestureRecognizerDelegate, UITextFieldDelegate> {
     EOTimeStepper  *stepper;        // EOClock's; not retained
     EOClock        *clock;          // not retained
-    UIView         *nowBlock;       // over the altitude dial: Now ▶
+    UIView         *nowBlock;       // over the altitude dial: the status, and Now ▶
     UIView         *driveBlock;     // over the azimuth dial: ◀ ‖ ▶
     UIView         *modeBlock;      // over the eclipse dial: the mode dial
     UIView         *stepBlock;      // over the equation-of-time dial: the pair
     UIView         *odometer;
+    UILabel        *statusLabel;
     UIButton       *nowButton;
     UIButton       *reverseButton;
     UIButton       *pauseButton;
@@ -55,7 +55,8 @@ static const double EOOdometerButtonsWidth = 154;
     UITextField    *hourField;
     UITextField    *minuteField;
     UITextField    *secondField;
-    UILabel        *infoLabel;      // the odometer's second line
+    UIButton       *keyboardButton; // the odometer's: type the date and time instead
+    bool           entering;        // the wheels take typing (keyboardTapped:) until the entry ends
     bool           open;            // the blocks show
     bool           landscape;       // the blocks' shape
     EOTimeStepUnit shownUnit;       // the dial's unit as last drawn
@@ -84,9 +85,6 @@ static const double EOOdometerButtonsWidth = 154;
 
 // Set mode: the blocks show, and the odometer takes touches
 - (void)setOpen:(bool)isOpen;
-
-// The odometer's second line, from EOClock's strip
-- (void)setInfoText:(NSString *)text color:(UIColor *)color;
 
 // Once per clock tick while the odometer or the blocks show
 - (void)refresh;

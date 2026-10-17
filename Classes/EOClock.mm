@@ -61,7 +61,6 @@ static NSDateFormatter	*bigDateFormatter;
 static NSDateFormatter	*bigDate2Formatter;
 static NSDateFormatter	*utcDateFormatter;
 static NSDateFormatter	*tzFormatter;
-static NSDateFormatter	*stripZoneFormatter;
 double fullWidth,fullHeight;
 
 static const int    EOClockUpdate = 20;	// how many updates(ticks) per second
@@ -102,7 +101,6 @@ ESLocationAsString(ESLocation *location) {
 - (void)buttonRepeater;
 - (void)moveClockWidgetsForOrientation:(UIInterfaceOrientation)newOrientation newSize:(CGSize)newSize;
 - (void)notifyTimeAdjustment;
-- (void)updateTimeStrip;
 - (void)updateTimeStripVisibility;
 - (void)placeTimePanelForOrientation:(UIInterfaceOrientation)orientation;
 - (void)openTimePanel;
@@ -383,8 +381,6 @@ static NSString *const kEOAlarmNotificationIdentifier = @"EOAlarm";
 	[dateFormatter setDateFormat:@"EEE, yyyy MMM dd  HH:mm:ss zzz (ZZZ)"];
 	tzFormatter = [[NSDateFormatter alloc] init];
 	[tzFormatter setDateFormat:@"zzz"];
-	stripZoneFormatter = [[NSDateFormatter alloc] init];
-	[stripZoneFormatter setDateFormat:@"zzz (ZZZ)"];
 	bigDateFormatter = [[NSDateFormatter alloc] init];
 	[bigDateFormatter setDateFormat:@"MMM dd"];
 	bigDate2Formatter = [[NSDateFormatter alloc] init];
@@ -442,9 +438,8 @@ static NSString *const kEOAlarmNotificationIdentifier = @"EOAlarm";
 BOOL timeChanged = false;
 
 //// the time controller's odometer, which replaces the strip along the top: the displayed time on its
-//// wheels, and on its second line what the clock is doing, how far it is from the present, the zone and
-//// the location.  Shown while the controller is open or the time is not the present; the status bar
-//// hides with it (see setStatusBar:)
+//// wheels.  Shown while the controller is open or the time is not the present; the status bar hides with
+//// it (see setStatusBar:)
 
 - (UIView *)timeStrip {
     return timePanel.odometer;
@@ -452,32 +447,6 @@ BOOL timeChanged = false;
 
 - (bool)timeStripVisible {
     return setMode || !time->isCorrect();
-}
-
-- (void)updateTimeStrip {
-    if (aboutToReorient) {
-	return;
-    }
-    NSString *status = [stepper statusString];
-    if ([stepper isAtLimit]) {
-	status = [NSString stringWithFormat:@"%@  %@", status, NSLocalizedString(@"AT LIMIT", @"strip suffix: the time is clamped at the end of the supported range (4000 BCE to 2800 CE)")];
-    }
-    NSString *zone = [stripZoneFormatter stringFromDate:[NSDate dateWithTimeIntervalSinceReferenceDate:time->currentTime()]];
-    // The location last, where the line truncates when it runs long
-    if (!time->isCorrect()) {
-	[timePanel setInfoText:[NSString stringWithFormat:@"%@  <%s>  %@  %@",
-					 status,
-					 time->representationOfDeltaOffsetUsingEnv(env).c_str(),
-					 zone,
-					 ESLocationAsString(env->location())]
-			 color:[UIColor colorWithRed:1 green:0.35 blue:0.35 alpha:1]];
-    } else {
-	[timePanel setInfoText:[NSString stringWithFormat:@"%@  %@  %@",
-					 status,
-					 zone,
-					 ESLocationAsString(env->location())]
-			 color:[UIColor whiteColor]];
-    }
 }
 
 // Show or hide the odometer (and the status bar with it) as the controller opens and closes and as the
@@ -492,7 +461,6 @@ BOOL timeChanged = false;
     }
     self.timeStrip.hidden = !visible;
     if (visible) {
-	[self updateTimeStrip];
 	[timePanel refresh];
     }
     [self setStatusBar:NULL];
@@ -803,7 +771,6 @@ static bool firstAfterComingToForeground = true;
     [self updateNowButton];
     [self updateScrubShield];
     if ([self timeStripVisible]) {
-	[self updateTimeStrip];
 	[timePanel refresh];
     }
 
@@ -834,7 +801,6 @@ static bool firstAfterComingToForeground = true;
     NSTimeZone *nsTZ = ESCalendar_nsTimeZone(ESCalendar_localTimeZone());
     [dateFormatter setTimeZone:nsTZ];
     [tzFormatter setTimeZone:nsTZ];
-    [stripZoneFormatter setTimeZone:nsTZ];
     [bigDateFormatter setTimeZone:nsTZ];
     [bigDate2Formatter setTimeZone:nsTZ];
 }
@@ -1697,9 +1663,9 @@ static double odometerY;
 	odometerX = 0;
 	odometerY = 348;			// above the main dial, between the Moon and the map
     }
-    // Set / Done at the odometer's right end, on its first line, Now to its left (placeSetAndNowButtonsForOrientation:)
+    // Set / Done at the odometer's right end, Now to its left (placeSetAndNowButtonsForOrientation:)
     resetX = odometerX + EOOdometerWidth/2 - 4 - (advButtonWidth+24)/2;
-    resetY = odometerY + EOOdometerHeight/2 - EOOdometerRowHeight/2;
+    resetY = odometerY;
     EVX = BMX + centerX;
     EVY = BMY + centerY;
     

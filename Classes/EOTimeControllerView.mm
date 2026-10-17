@@ -27,7 +27,8 @@ static const double groupGap = 14;              // between the date's wheels and
 static const double eraWidth = 40;
 static const double yearWidth = 52;
 static const double wheelWidth = 34;            // month, day, hour, minute, second
-static const double notch = 14;                 // a wheel drag's travel per unit rolled
+static const double notch = 20;                 // a wheel drag's travel per unit rolled
+static const double statusHeight = 30;          // the status over Now: two lines, for a scrub at the limit
 static const double scrubAlpha = 0.38;          // the blocks while a scrub runs (the web's tuned level)
 static const NSTimeInterval fadeDuration = 0.15;
 static const NSTimeInterval flashDuration = 0.3;    // a pair button after a search that found nothing
@@ -294,10 +295,11 @@ static double angleForPosition(int i) {
     return label;
 }
 
-// An odometer wheel: digits from the keyboard, or a vertical drag that rolls its unit (wheelPanned:)
+// An odometer wheel: a vertical drag rolls its unit (wheelPanned:); it takes digits from the keyboard only
+// while an entry is open (keyboardTapped:)
 - (UITextField *)addWheelWithPlaceholder:(NSString *)placeholder unit:(EOTimeStepUnit)unit {
     UITextField *field = [[UITextField alloc] initWithFrame:CGRectZero];
-    field.font = [UIFont monospacedDigitSystemFontOfSize:17 weight:UIFontWeightMedium];
+    field.font = [UIFont monospacedDigitSystemFontOfSize:18 weight:UIFontWeightMedium];
     field.textColor = rgb(0xdd, 0xdd, 0xdd);
     field.tintColor = rgb(0x88, 0xaa, 0xff);
     field.textAlignment = NSTextAlignmentCenter;
@@ -342,12 +344,15 @@ static double angleForPosition(int i) {
         faded = false;
         shownBCE = false;
         rollCarry = 0;
+        entering = false;
 
         self.opaque = NO;
         self.backgroundColor = [UIColor clearColor];
 
-        // Over the altitude dial: Now ▶, acting on the press
+        // Over the altitude dial: what the clock is doing, and Now ▶, acting on the press
         nowBlock = [self addBlock];
+        statusLabel = [self addLabelTo:nowBlock font:[UIFont fontWithName:@"Arial" size:12] color:rgb(0x88, 0xaa, 0xff)];
+        statusLabel.numberOfLines = 2;
         nowButton = [self addButtonTo:nowBlock title:[NSString stringWithFormat:@"%@ ▶", NSLocalizedString(@"Now", @"button: return the clock to the present")]
                                  font:[UIFont fontWithName:@"Arial" size:18]];
         styleAsPlain(nowButton);
@@ -397,8 +402,8 @@ static double angleForPosition(int i) {
         [stepBlock addSubview:padlock];
         [padlock release];
 
-        // The odometer: the wheels on the first line, left of Set / Done and Now (EOClock's), the strip's
-        // text on the second.  A wheel's value applies when its edit ends; the era, at once.
+        // The odometer: the wheels, then the keyboard button and Set / Done (EOClock's).  A typed value
+        // applies when its wheel's edit ends; the era, at once.
         odometer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, EOOdometerWidth, EOOdometerHeight)];
         odometer.opaque = NO;
         odometer.backgroundColor = [UIColor colorWithRed:26/255.0 green:26/255.0 blue:46/255.0 alpha:0.96];
@@ -419,10 +424,13 @@ static double angleForPosition(int i) {
         hourField = [self addWheelWithPlaceholder:@"HH" unit:EOTimeStepHour];
         minuteField = [self addWheelWithPlaceholder:@"mm" unit:EOTimeStepMinute];
         secondField = [self addWheelWithPlaceholder:@"ss" unit:EOTimeStepSecond];
-        infoLabel = [self addLabelTo:odometer font:[UIFont fontWithName:@"Arial" size:11] color:[UIColor whiteColor]];
-        infoLabel.adjustsFontSizeToFitWidth = YES;
-        infoLabel.minimumScaleFactor = 0.85;
-        infoLabel.lineBreakMode = NSLineBreakByTruncatingTail;    // the location goes first
+        keyboardButton = [self addButtonTo:odometer title:nil font:nil];
+        [keyboardButton setImage:[UIImage systemImageNamed:@"keyboard"
+                                         withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:17]]
+                        forState:UIControlStateNormal];
+        styleAsPlain(keyboardButton);
+        keyboardButton.tintColor = rgb(0x99, 0x99, 0xbb);
+        [keyboardButton addTarget:self action:@selector(keyboardTapped:) forControlEvents:UIControlEventTouchUpInside];
 
         [self layoutOdometer];
         [self layoutForLandscape:false];
@@ -455,9 +463,11 @@ static double angleForPosition(int i) {
     }
     double inner = w - 2 * blockPad;
 
-    // Now: one wide button across the middle
-    double nowHeight = fmin(64, h - 2 * blockPad);
-    nowButton.frame = CGRectMake(blockPad, (h - nowHeight) / 2, inner, nowHeight);
+    // The status on top, Now below it, in the middle of what is left
+    statusLabel.frame = CGRectMake(blockPad, blockPad, inner, statusHeight);
+    double nowTop = blockPad + statusHeight + gap;
+    double nowHeight = fmin(64, h - nowTop - blockPad);
+    nowButton.frame = CGRectMake(blockPad, nowTop + (h - nowTop - blockPad - nowHeight) / 2, inner, nowHeight);
 
     // The drive: ▶ ‖ ◀ down a tall block, the lever's travel; ◀ ‖ ▶ across a square one
     if (h > w * 1.2) {
@@ -488,13 +498,13 @@ static double angleForPosition(int i) {
     padlock.frame = CGRectMake(0, pairTop, w, h - pairTop - blockPad);
 }
 
-// The wheels centred in the first line's space left of the buttons; the info line across the whole
+// The wheels centred in the space left of the buttons; the keyboard button where Now goes while closed
 - (void)layoutOdometer {
     double wheelsWidth = EOOdometerWidth - EOOdometerButtonsWidth;
     double total = eraWidth + yearWidth + 5 * wheelWidth + 5 * wheelGap + groupGap + 2;
     double x = (wheelsWidth - total) / 2;
-    double y = 3;
-    double height = EOOdometerRowHeight - 4;
+    double y = 4;
+    double height = EOOdometerHeight - 8;
     eraButton.frame = CGRectMake(x, y, eraWidth, height);
     x += eraWidth + wheelGap + 2;
     yearField.frame = CGRectMake(x, y, yearWidth, height);
@@ -503,7 +513,7 @@ static double angleForPosition(int i) {
         field.frame = CGRectMake(x, y, wheelWidth, height);
         x += wheelWidth + (field == dayField ? groupGap : wheelGap);
     }
-    infoLabel.frame = CGRectMake(6, EOOdometerRowHeight, EOOdometerWidth - 12, EOOdometerHeight - EOOdometerRowHeight - 2);
+    keyboardButton.frame = CGRectMake(wheelsWidth + 4, y, 69, height);
 }
 
 - (void)setOpen:(bool)isOpen {
@@ -512,15 +522,9 @@ static double angleForPosition(int i) {
         block.hidden = !open;
     }
     odometer.userInteractionEnabled = open;
+    keyboardButton.hidden = !open;
     if (open) {
         [self refresh];
-    }
-}
-
-- (void)setInfoText:(NSString *)text color:(UIColor *)color {
-    setLabelText(infoLabel, text);
-    if (![infoLabel.textColor isEqual:color]) {
-        infoLabel.textColor = color;
     }
 }
 
@@ -645,6 +649,21 @@ static double angleForPosition(int i) {
     [self refresh];
 }
 
+// The keyboard button: the wheels take typing, from the year on, until the entry ends
+- (void)keyboardTapped:(UIButton *)sender {
+    if (entering) {
+        [self endEditing:YES];      // a second tap closes the entry, as Return does
+        return;
+    }
+    entering = true;
+    styleAsActive(keyboardButton);
+    [yearField becomeFirstResponder];
+}
+
+- (BOOL)textFieldShouldBeginEditing:(UITextField *)textField {
+    return entering;    // a tap on a wheel is not an entry: it rolls, or does nothing
+}
+
 // Digits only, and no more of them than the wheel can mean (a hardware keyboard types anything)
 - (BOOL)textField:(UITextField *)textField shouldChangeCharactersInRange:(NSRange)range replacementString:(NSString *)string {
     if ([string length] == 0) {
@@ -667,8 +686,16 @@ static double angleForPosition(int i) {
     return NO;
 }
 
+// The value applies; and once no other wheel has taken over the keyboard (a tap from wheel to wheel ends
+// one edit before it begins the next), the entry is over
 - (void)textFieldDidEndEditing:(UITextField *)textField {
     [self applyDateFields];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (entering && ![self editingField]) {
+            entering = false;
+            styleAsPlain(keyboardButton);
+        }
+    });
 }
 
 // The typed date and time, through the stepper.  A wheel left empty leaves the time alone; the next
@@ -744,6 +771,11 @@ static double angleForPosition(int i) {
         shownBody = body;
     }
     setLabelText(stepLabel, [stepper stepLabelWithBodyName:bodyName]);
+    NSString *status = [stepper statusString];
+    if ([stepper isAtLimit]) {
+        status = [NSString stringWithFormat:@"%@\n%@", status, NSLocalizedString(@"AT LIMIT", @"strip suffix: the time is clamped at the end of the supported range (4000 BCE to 2800 CE)")];
+    }
+    setLabelText(statusLabel, status);
 
     int drive = [stepper runDirection];
     if (drive != shownDrive) {
