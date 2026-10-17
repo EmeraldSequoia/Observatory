@@ -71,6 +71,25 @@ static void styleAsEra(UIButton *button, bool bce) {     // the web's #tp-bce, a
     }
 }
 
+// A wheel's two looks.  Rolling: a drum, shaded dark toward its top and bottom edges (the gradient is the
+// field's first sublayer, under its text).  Typing, while the keyboard switch is on: a plain light field.
+static void styleWheel(UITextField *field, bool typing) {
+    CALayer *drum = [field.layer.sublayers objectAtIndex:0];
+    drum.hidden = typing;
+    if (typing) {
+        field.backgroundColor = rgb(0xee, 0xee, 0xf4);
+        field.textColor = rgb(0x11, 0x11, 0x22);
+        field.layer.borderWidth = 2;
+        field.layer.borderColor = rgb(0x88, 0xaa, 0xff).CGColor;
+        field.layer.cornerRadius = 4;
+    } else {
+        field.backgroundColor = rgb(0x30, 0x30, 0x40);
+        field.textColor = rgb(0xee, 0xee, 0xee);
+        field.layer.borderWidth = 0;
+        field.layer.cornerRadius = 2;
+    }
+}
+
 // Write a label or a field only when its text changes: refresh runs twenty times a second
 static void setLabelText(UILabel *label, NSString *text) {
     if (![label.text isEqualToString:text]) {
@@ -296,17 +315,20 @@ static double angleForPosition(int i) {
 }
 
 // An odometer wheel: a vertical drag rolls its unit (wheelPanned:); it takes digits from the keyboard only
-// while an entry is open (keyboardTapped:)
+// while the keyboard switch is on (keyboardTapped:)
 - (UITextField *)addWheelWithPlaceholder:(NSString *)placeholder unit:(EOTimeStepUnit)unit {
     UITextField *field = [[UITextField alloc] initWithFrame:CGRectZero];
     field.font = [UIFont monospacedDigitSystemFontOfSize:18 weight:UIFontWeightMedium];
-    field.textColor = rgb(0xdd, 0xdd, 0xdd);
-    field.tintColor = rgb(0x88, 0xaa, 0xff);
+    field.tintColor = rgb(0x33, 0x55, 0xcc);
     field.textAlignment = NSTextAlignmentCenter;
-    field.backgroundColor = rgb(0x2a, 0x2a, 0x3e);
-    field.layer.cornerRadius = 6;
-    field.layer.borderWidth = 1;
-    field.layer.borderColor = rgb(0x44, 0x44, 0x44).CGColor;
+    field.clipsToBounds = YES;
+    CAGradientLayer *drum = [CAGradientLayer layer];
+    drum.colors = [NSArray arrayWithObjects:(id)[UIColor colorWithWhite:0 alpha:0.75].CGColor, (id)[UIColor colorWithWhite:0 alpha:0].CGColor,
+                                            (id)[UIColor colorWithWhite:0 alpha:0].CGColor, (id)[UIColor colorWithWhite:0 alpha:0.75].CGColor, nil];
+    drum.locations = [NSArray arrayWithObjects:[NSNumber numberWithDouble:0], [NSNumber numberWithDouble:0.35],
+                                               [NSNumber numberWithDouble:0.65], [NSNumber numberWithDouble:1], nil];
+    [field.layer insertSublayer:drum atIndex:0];
+    styleWheel(field, false);
     field.placeholder = placeholder;
     field.keyboardType = UIKeyboardTypeNumberPad;
     field.keyboardAppearance = UIKeyboardAppearanceDark;
@@ -410,8 +432,7 @@ static double angleForPosition(int i) {
         odometer.layer.cornerRadius = 8;
         odometer.layer.borderWidth = 1;
         odometer.layer.borderColor = rgb(0x3a, 0x3a, 0x5e).CGColor;
-        odometer.userInteractionEnabled = NO;
-        odometer.hidden = YES;
+
         [self addSubview:odometer];
         [odometer release];
         eraButton = [self addButtonTo:odometer title:NSLocalizedString(@"CE", @"era toggle: Common Era") font:[UIFont fontWithName:@"Arial" size:13]];
@@ -430,6 +451,7 @@ static double angleForPosition(int i) {
                         forState:UIControlStateNormal];
         styleAsPlain(keyboardButton);
         keyboardButton.tintColor = rgb(0x99, 0x99, 0xbb);
+        keyboardButton.adjustsImageWhenHighlighted = NO;
         [keyboardButton addTarget:self action:@selector(keyboardTapped:) forControlEvents:UIControlEventTouchUpInside];
 
         [self layoutOdometer];
@@ -513,6 +535,12 @@ static double angleForPosition(int i) {
         field.frame = CGRectMake(x, y, wheelWidth, height);
         x += wheelWidth + (field == dayField ? groupGap : wheelGap);
     }
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    for (UITextField *field in [NSArray arrayWithObjects:yearField, monthField, dayField, hourField, minuteField, secondField, nil]) {
+        [[field.layer.sublayers objectAtIndex:0] setFrame:field.bounds];
+    }
+    [CATransaction commit];
     keyboardButton.frame = CGRectMake(wheelsWidth + 4, y, 69, height);
 }
 
@@ -521,7 +549,6 @@ static double angleForPosition(int i) {
     for (UIView *block in [NSArray arrayWithObjects:nowBlock, driveBlock, modeBlock, stepBlock, nil]) {
         block.hidden = !open;
     }
-    odometer.userInteractionEnabled = open;
     keyboardButton.hidden = !open;
     if (open) {
         [self refresh];
@@ -620,19 +647,22 @@ static double angleForPosition(int i) {
     return nil;
 }
 
-// A wheel rolls only for a mostly vertical drag, and not while it is being typed into
+// A wheel rolls only for a mostly vertical drag, and not while the keyboard switch makes it a field
 - (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)recognizer {
-    if (![recognizer isKindOfClass:[UIPanGestureRecognizer class]] || [recognizer.view isFirstResponder]) {
+    if (![recognizer isKindOfClass:[UIPanGestureRecognizer class]] || entering) {
         return NO;
     }
     CGPoint velocity = [(UIPanGestureRecognizer *)recognizer velocityInView:recognizer.view];
     return fabs(velocity.y) > fabs(velocity.x);
 }
 
-// Up rolls the wheel on, down rolls it back, a unit per notch of travel; an edit in progress applies first
+// Up rolls the wheel on, down rolls it back, a unit per notch of travel.  With the controller closed, the
+// drag opens it first, as Set would.
 - (void)wheelPanned:(UIPanGestureRecognizer *)recognizer {
     if (recognizer.state == UIGestureRecognizerStateBegan) {
-        [self endEditing:YES];
+        if (!open) {
+            [clock openTimePanel];
+        }
         rollCarry = 0;
     }
     rollCarry -= [recognizer translationInView:recognizer.view].y;
@@ -649,19 +679,42 @@ static double angleForPosition(int i) {
     [self refresh];
 }
 
-// The keyboard button: the wheels take typing, from the year on, until the entry ends
-- (void)keyboardTapped:(UIButton *)sender {
-    if (entering) {
-        [self endEditing:YES];      // a second tap closes the entry, as Return does
+// The keyboard switch.  On, the wheels become fields: the year takes the keyboard, a tap on another field
+// moves to it, and Return or a tap elsewhere puts the keyboard away with the switch still on.  Off, any
+// edit in progress applies and the wheels roll again.
+- (void)setEntering:(bool)on {
+    if (on == entering) {
         return;
     }
-    entering = true;
-    styleAsActive(keyboardButton);
-    [yearField becomeFirstResponder];
+    if (!on) {
+        [self endEditing:YES];
+    }
+    entering = on;
+    for (UITextField *field in [NSArray arrayWithObjects:yearField, monthField, dayField, hourField, minuteField, secondField, nil]) {
+        styleWheel(field, on);
+    }
+    if (on) {
+        styleAsActive(keyboardButton);
+        [keyboardButton setImage:[UIImage systemImageNamed:@"keyboard.fill"
+                                         withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:17]]
+                        forState:UIControlStateNormal];
+        keyboardButton.tintColor = rgb(0x88, 0xaa, 0xff);
+        [yearField becomeFirstResponder];
+    } else {
+        styleAsPlain(keyboardButton);
+        [keyboardButton setImage:[UIImage systemImageNamed:@"keyboard"
+                                         withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:17]]
+                        forState:UIControlStateNormal];
+        keyboardButton.tintColor = rgb(0x99, 0x99, 0xbb);
+    }
+}
+
+- (void)keyboardTapped:(UIButton *)sender {
+    [self setEntering:!entering];
 }
 
 - (BOOL)textFieldShouldBeginEditing:(UITextField *)textField {
-    return entering;    // a tap on a wheel is not an entry: it rolls, or does nothing
+    return entering;    // with the switch off a tap on a wheel does nothing: wheels roll
 }
 
 // Digits only, and no more of them than the wheel can mean (a hardware keyboard types anything)
@@ -686,16 +739,8 @@ static double angleForPosition(int i) {
     return NO;
 }
 
-// The value applies; and once no other wheel has taken over the keyboard (a tap from wheel to wheel ends
-// one edit before it begins the next), the entry is over
 - (void)textFieldDidEndEditing:(UITextField *)textField {
     [self applyDateFields];
-    dispatch_async(dispatch_get_main_queue(), ^{
-        if (entering && ![self editingField]) {
-            entering = false;
-            styleAsPlain(keyboardButton);
-        }
-    });
 }
 
 // The typed date and time, through the stepper.  A wheel left empty leaves the time alone; the next
@@ -719,6 +764,9 @@ static double angleForPosition(int i) {
 }
 
 - (void)eraTapped:(UIButton *)sender {
+    if (!open) {
+        [clock openTimePanel];
+    }
     [self showEra:!shownBCE];
     [self applyDateFields];
 }
@@ -830,7 +878,8 @@ static double angleForPosition(int i) {
 }
 
 - (void)prepareToHide {
-    [self endEditing:YES];      // a pending edit applies; the keyboard goes
+    [self setEntering:false];   // a pending edit applies; the keyboard goes
+    [self endEditing:YES];
     [stepper endPress];
     offButton = false;
     [self refresh];

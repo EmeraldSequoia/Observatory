@@ -72,7 +72,7 @@
 - (void)viewDidAppear:(BOOL)animated {
     traceEnter("viewDidAppear");
     [[EOClock theClock] setStatusBar:nil];
-    [EOClock theClock].timeStrip.hidden = ![[EOClock theClock] timeStripVisible];
+    [EOClock theClock].timeStrip.hidden = false;
     [super viewDidAppear:animated];
     [self becomeFirstResponder];    // for keyCommands
     traceExit ("viewDidAppear");

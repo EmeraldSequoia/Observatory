@@ -6,9 +6,8 @@
 //  clock's status over Now, the drive ◀ ‖ ▶, the mode dial with its body, and the ◀ ▶ pair: tap to
 //  step, hold to scrub, lift off to run hands-free), and the odometer along the top, which replaces
 //  the old strip: wheels for the displayed date and time, each rolled by a vertical drag, and a
-//  keyboard button that makes them typeable until the entry ends.  The odometer shows whenever the
-//  strip did (EOClock's timeStripVisible), open or not; it takes touches only while the controller
-//  is open.
+//  keyboard switch that, while on, turns them into fields to type into instead.  The odometer always
+//  shows, and a drag on a wheel opens the controller as Set does.
 //
 //  The view itself spans the canvas and takes no touches; EOClock places its blocks where the
 //  dials are and its odometer where the strip goes (moveClockWidgetsForOrientation:), with
@@ -55,8 +54,8 @@ static const double EOOdometerButtonsWidth = 154;
     UITextField    *hourField;
     UITextField    *minuteField;
     UITextField    *secondField;
-    UIButton       *keyboardButton; // the odometer's: type the date and time instead
-    bool           entering;        // the wheels take typing (keyboardTapped:) until the entry ends
+    UIButton       *keyboardButton; // the odometer's switch: type the date and time instead of rolling it
+    bool           entering;        // the switch is on: the wheels are fields (keyboardTapped:)
     bool           open;            // the blocks show
     bool           landscape;       // the blocks' shape
     EOTimeStepUnit shownUnit;       // the dial's unit as last drawn
@@ -83,7 +82,7 @@ static const double EOOdometerButtonsWidth = 154;
 // in landscape, where each side's two dials stack in a column, a square in portrait's corners
 - (void)layoutForLandscape:(bool)isLandscape;
 
-// Set mode: the blocks show, and the odometer takes touches
+// Set mode: the blocks show, and the keyboard switch
 - (void)setOpen:(bool)isOpen;
 
 // Once per clock tick while the odometer or the blocks show

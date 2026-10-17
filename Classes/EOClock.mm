@@ -280,7 +280,7 @@ static NSString *const kEOAlarmNotificationIdentifier = @"EOAlarm";
     if (appDelegate) {
         MainViewController *mainViewController = appDelegate.mainViewController;
         if (mainViewController) {
-            mainViewController.statusBarHidden = !finishingHelp && ([self screenIsMirrored] || [self timeStripVisible]);
+            mainViewController.statusBarHidden = !finishingHelp && ([self screenIsMirrored] || [self timeControllerActive]);
         }
     }
 }
@@ -438,30 +438,23 @@ static NSString *const kEOAlarmNotificationIdentifier = @"EOAlarm";
 BOOL timeChanged = false;
 
 //// the time controller's odometer, which replaces the strip along the top: the displayed time on its
-//// wheels.  Shown while the controller is open or the time is not the present; the status bar hides with
-//// it (see setStatusBar:)
+//// wheels, always shown (but for the reorientation and Help choreography, which hide and show it), and a
+//// drag on a wheel opens the controller.  The status bar hides while the controller is open or the time
+//// is not the present (see setStatusBar:).
 
 - (UIView *)timeStrip {
     return timePanel.odometer;
 }
 
-- (bool)timeStripVisible {
+- (bool)timeControllerActive {
     return setMode || !time->isCorrect();
 }
 
-// Show or hide the odometer (and the status bar with it) as the controller opens and closes and as the
-// time leaves and returns to the present.  The reorientation and Help choreography set both themselves.
+// Show or hide the status bar as the controller opens and closes and as the time leaves and returns to
+// the present.  The reorientation and Help choreography set it themselves.
 - (void)updateTimeStripVisibility {
     if (aboutToReorient || finishingHelp) {
 	return;
-    }
-    bool visible = [self timeStripVisible];
-    if (self.timeStrip.hidden == !visible) {
-	return;
-    }
-    self.timeStrip.hidden = !visible;
-    if (visible) {
-	[timePanel refresh];
     }
     [self setStatusBar:NULL];
 }
@@ -770,9 +763,7 @@ static bool firstAfterComingToForeground = true;
     [stepper scrubTick];	// a held ◀ or ▶ moves the time one unit per tick, as the old row did
     [self updateNowButton];
     [self updateScrubShield];
-    if ([self timeStripVisible]) {
-	[timePanel refresh];
-    }
+    [timePanel refresh];
 
     if (!inBackground) {
 	// now get each part to redraw itself if its target time is reached
@@ -2508,7 +2499,7 @@ static bool localeIsCyrillic() {
         finishingHelp = false;
     } else {
 	[self setStatusBar:NULL];
-        self.timeStrip.hidden = ![self timeStripVisible];
+        self.timeStrip.hidden = false;
     }
 }
 
