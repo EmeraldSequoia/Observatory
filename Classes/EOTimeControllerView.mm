@@ -339,6 +339,11 @@ static double angleForPosition(int i) {
     }
     field.returnKeyType = UIReturnKeyDone;
     field.autocorrectionType = UITextAutocorrectionTypeNo;
+    // Digits want no spelling, and no shortcut bar (cut, copy, paste) over the keys; less for the first
+    // keyboard of a launch to load
+    field.spellCheckingType = UITextSpellCheckingTypeNo;
+    field.inputAssistantItem.leadingBarButtonGroups = [NSArray array];
+    field.inputAssistantItem.trailingBarButtonGroups = [NSArray array];
     field.delegate = self;
     field.tag = unit;
     UIPanGestureRecognizer *roll = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(wheelPanned:)];
