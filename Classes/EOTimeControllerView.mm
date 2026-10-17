@@ -176,8 +176,8 @@ static void drawTicks(CGContextRef context, CGPoint c, int n, double r1, double 
 
 // After the Moon azimuth dial, simplified: a line around the rim with the graduations inside it, faint spokes
 // from a small hub, and a hand.  The positions' words, full and capitalized, in the location picker's Hoefler Text,
-// lie radially out to the rim, reading out from the centre on the right and in toward it on the left; the
-// graduations fill the band between them, and the hand points at the selected word, which is in gold.
+// lie radially out to the rim, the calendar units reading out from the centre and the astronomical events in
+// toward it; the graduations fill the gaps between them, and the hand points at the selected word, in gold.
 - (void)drawRect:(CGRect)rect {
     CGContextRef context = UIGraphicsGetCurrentContext();
     CGPoint c = [self hub];
@@ -264,12 +264,12 @@ static void drawTicks(CGContextRef context, CGPoint c, int n, double r1, double 
         double angle = i * step;
         CGContextSaveGState(context);
         CGContextTranslateCTM(context, c.x, c.y);
-        if (angle < M_PI) {
-            // The right half: along the radius, reading outward, ending at the rim
+        if (![EOTimeStepper unitIsAstro:(EOTimeStepUnit)i]) {
+            // The calendar units: along the radius, reading outward, ending at the rim
             CGContextRotateCTM(context, angle - M_PI / 2);
             [label drawAtPoint:CGPointMake(wordsOuter - extent.width, -extent.height / 2) withAttributes:attributes];
         } else {
-            // The left half: turned around, reading inward, starting at the rim
+            // The astronomical events: turned around, reading inward, starting at the rim
             CGContextRotateCTM(context, angle + M_PI / 2);
             [label drawAtPoint:CGPointMake(-wordsOuter, -extent.height / 2) withAttributes:attributes];
         }
