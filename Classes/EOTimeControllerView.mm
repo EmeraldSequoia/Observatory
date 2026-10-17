@@ -117,7 +117,7 @@ static void setFieldText(UITextField *field, NSString *text) {
 }
 
 //// The mode dial: a rotary switch with a position per unit around its rim, clockwise from the top.  A touch
-//// anywhere on it turns the hand to the nearest position, and a drag around it keeps turning.
+//// anywhere on it turns the handle to the nearest position, and a drag around it keeps turning.
 
 @interface EOTimeControllerView (Selectors)
 - (void)dialSelectedUnit:(EOTimeStepUnit)unit;
@@ -174,31 +174,31 @@ static void drawTicks(CGContextRef context, CGPoint c, int n, double r1, double 
     CGContextStrokePath(context);
 }
 
-// After the Moon azimuth dial, simplified: a line around the rim with the graduations inside it, faint spokes
-// from a small hub, and a hand.  The positions' words, full and capitalized, in the azimuth dial's Arial,
-// lie radially out to the rim, the calendar units reading out from the centre and the astronomical events in
-// toward it; the graduations fill the gaps between them, and the hand points at the selected word, in gold.
+// After the Moon azimuth dial, simplified: a line around the rim with the graduations inside it, and faint
+// spokes from a small hub.  The positions' words, full and capitalized, in the azimuth dial's Arial, lie
+// radially out to the rim, the calendar units reading out from the centre and the astronomical events in
+// toward it; the graduations fill the gaps between them.  The selection is a ship's engine order telegraph's
+// handle: an open, tapered loop in gold from the hub to the rim, framing the selected word.
 - (void)drawRect:(CGRect)rect {
     CGContextRef context = UIGraphicsGetCurrentContext();
     CGPoint c = [self hub];
     double rim = [self rimRadius];
     double band = rim * 0.17;
     double hubR = rim * 0.1;
-    double wordsOuter = rim - 2;
-    double wordsInner = rim * 0.24;
+    double wordsOuter = rim - 3;
+    double wordsInner = rim * 0.26;
     double step = 2 * M_PI / EOTimeStepNumUnits;
 
-    // The words, all at one size: the largest at which the longest fits between the hub and the rim
+    // The words, all at one size whatever is selected: the largest at which the longest fits between the hub
+    // and the rim
     double size = rim * 0.2;
-    UIFont *font, *bold;
+    UIFont *font;
     double widest;
     do {
         font = [UIFont fontWithName:@"Arial" size:size];
-        bold = [UIFont fontWithName:@"Arial-BoldMT" size:size];
         widest = 0;
         for (int i = 0; i < EOTimeStepNumUnits; i++) {
-            UIFont *f = (i == unit) ? bold : font;
-            widest = fmax(widest, [[EOTimeStepper dialLabelForUnit:(EOTimeStepUnit)i] sizeWithAttributes:[NSDictionary dictionaryWithObject:f forKey:NSFontAttributeName]].width);
+            widest = fmax(widest, [[EOTimeStepper dialLabelForUnit:(EOTimeStepUnit)i] sizeWithAttributes:[NSDictionary dictionaryWithObject:font forKey:NSFontAttributeName]].width);
         }
         size -= 0.25;
     } while (widest > wordsOuter - wordsInner && size > 5);
@@ -230,36 +230,12 @@ static void drawTicks(CGContextRef context, CGPoint c, int n, double r1, double 
         CGContextStrokePath(context);
     }
 
-    // The hand, filled, out to just short of the selected word
-    double a = unit * step;
-    double selectedWidth = [[EOTimeStepper dialLabelForUnit:unit] sizeWithAttributes:[NSDictionary dictionaryWithObject:bold forKey:NSFontAttributeName]].width;
-    double length = fmax(wordsOuter - selectedWidth - 3, hubR * 2);
-    CGPoint tip = CGPointMake(c.x + length * sin(a), c.y - length * cos(a));
-    CGPoint left = CGPointMake(c.x - hubR * 0.7 * cos(a), c.y - hubR * 0.7 * sin(a));
-    CGPoint right = CGPointMake(c.x + hubR * 0.7 * cos(a), c.y + hubR * 0.7 * sin(a));
-    CGContextSetLineWidth(context, 0.75);
-    CGContextSetFillColorWithColor(context, [UIColor lightGrayColor].CGColor);
-    CGContextSetStrokeColorWithColor(context, [UIColor grayColor].CGColor);
-    CGContextMoveToPoint(context, left.x, left.y);
-    CGContextAddLineToPoint(context, tip.x, tip.y);
-    CGContextAddLineToPoint(context, right.x, right.y);
-    CGContextClosePath(context);
-    CGContextDrawPath(context, kCGPathFillStroke);
-
-    // The hub over the hand's base
-    CGContextSetLineWidth(context, 0.5);
-    CGContextSetRGBStrokeColor(context, 1, 1, 1, 0.6);
-    CGContextSetRGBFillColor(context, 0.15, 0.15, 0.15, 1);
-    CGContextAddArc(context, c.x, c.y, hubR, 0, 2 * M_PI, 0);
-    CGContextDrawPath(context, kCGPathFillStroke);
-
-    UIColor *gold = [UIColor colorWithRed:1 green:0xc1/256.0 blue:0x25/256.0 alpha:1];      // the clock's minute hand
     UIColor *white = [UIColor colorWithWhite:1 alpha:0.85];
     UIColor *blue = [UIColor colorWithRed:0.65 green:0.75 blue:1 alpha:0.9];
     for (int i = 0; i < EOTimeStepNumUnits; i++) {
         NSString *label = [EOTimeStepper dialLabelForUnit:(EOTimeStepUnit)i];
-        NSDictionary *attributes = [NSDictionary dictionaryWithObjectsAndKeys:(i == unit ? bold : font), NSFontAttributeName,
-                                                 (i == unit ? gold : ([EOTimeStepper unitIsAstro:(EOTimeStepUnit)i] ? blue : white)), NSForegroundColorAttributeName, nil];
+        NSDictionary *attributes = [NSDictionary dictionaryWithObjectsAndKeys:font, NSFontAttributeName,
+                                                 ([EOTimeStepper unitIsAstro:(EOTimeStepUnit)i] ? blue : white), NSForegroundColorAttributeName, nil];
         CGSize extent = [label sizeWithAttributes:attributes];
         double angle = i * step;
         CGContextSaveGState(context);
@@ -275,6 +251,43 @@ static void drawTicks(CGContextRef context, CGPoint c, int n, double r1, double 
         }
         CGContextRestoreGState(context);
     }
+
+    // The handle, always the same: in its own frame, x out along the selected position's radius.  A loop
+    // narrow at the hub and as wide at the rim as a word is tall, with rounded corners, and a stem back to the
+    // hub it turns on.
+    double inner = hubR * 1.8;
+    double outer = rim - 0.5;
+    double innerHalf = hubR * 0.35;
+    double outerHalf = font.lineHeight / 2 + 3;
+    double corner = fmin(4, outerHalf * 0.6);
+    CGMutablePathRef loop = CGPathCreateMutable();
+    CGPathMoveToPoint(loop, NULL, inner, -innerHalf);
+    CGPathAddArcToPoint(loop, NULL, outer, -outerHalf, outer, 0, corner);
+    CGPathAddArcToPoint(loop, NULL, outer, outerHalf, inner, innerHalf, corner);
+    CGPathAddLineToPoint(loop, NULL, inner, innerHalf);
+    CGPathAddArc(loop, NULL, inner, 0, innerHalf, M_PI / 2, 3 * M_PI / 2, false);
+    CGPathCloseSubpath(loop);
+    CGContextSaveGState(context);
+    CGContextTranslateCTM(context, c.x, c.y);
+    CGContextRotateCTM(context, unit * step - M_PI / 2);
+    UIColor *gold = [UIColor colorWithRed:1 green:0xc1/256.0 blue:0x25/256.0 alpha:1];      // the clock's minute hand
+    CGContextSetStrokeColorWithColor(context, gold.CGColor);
+    CGContextSetLineJoin(context, kCGLineJoinRound);
+    CGContextSetLineWidth(context, 2);
+    CGContextAddPath(context, loop);
+    CGContextStrokePath(context);
+    CGContextMoveToPoint(context, 0, 0);
+    CGContextAddLineToPoint(context, inner - innerHalf, 0);
+    CGContextStrokePath(context);
+    CGContextRestoreGState(context);
+    CGPathRelease(loop);
+
+    // The hub the handle turns on
+    CGContextSetLineWidth(context, 1);
+    CGContextSetStrokeColorWithColor(context, gold.CGColor);
+    CGContextSetRGBFillColor(context, 0.15, 0.15, 0.15, 1);
+    CGContextAddArc(context, c.x, c.y, hubR, 0, 2 * M_PI, 0);
+    CGContextDrawPath(context, kCGPathFillStroke);
 }
 
 // The position nearest a point on the rim
