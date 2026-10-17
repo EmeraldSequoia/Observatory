@@ -254,15 +254,21 @@ static void drawTicks(CGContextRef context, CGPoint c, int n, double r1, double 
 
     // The handle, always the same: in its own frame, x out along the selected position's radius.  A wedge
     // narrow at the hub, its sides reaching the rim halfway between the full tick midway to each neighbour and
-    // the half tick before it, its end following the rim; and a stem back to the hub it turns on.
+    // the half tick before it, its end following the rim, its corners rounded; and a stem back to the hub.
     double inner = hubR * 1.8;
     double outer = rim - 0.5;
     double innerHalf = hubR * 0.35;
     double spread = 3.5 / 8 * step;     // the full tick is at 4/8 of a step from a word, the half tick at 3/8
+    double corner = 3.5;                // the rounding where the sides meet the rim
+    double cornerAngle = corner / outer;
+    CGPoint first = CGPointMake(outer * cos(spread), -outer * sin(spread));
+    CGPoint second = CGPointMake(outer * cos(spread), outer * sin(spread));
     CGMutablePathRef loop = CGPathCreateMutable();
     CGPathMoveToPoint(loop, NULL, inner, -innerHalf);
-    CGPathAddLineToPoint(loop, NULL, outer * cos(spread), -outer * sin(spread));
-    CGPathAddArc(loop, NULL, 0, 0, outer, -spread, spread, false);
+    // Each corner turns from the side onto the rim's tangent there, and the end follows the rim between them
+    CGPathAddArcToPoint(loop, NULL, first.x, first.y, first.x + sin(spread), first.y + cos(spread), corner);
+    CGPathAddArc(loop, NULL, 0, 0, outer, -spread + cornerAngle, spread - cornerAngle, false);
+    CGPathAddArcToPoint(loop, NULL, second.x, second.y, inner, innerHalf, corner);
     CGPathAddLineToPoint(loop, NULL, inner, innerHalf);
     CGPathAddArc(loop, NULL, inner, 0, innerHalf, M_PI / 2, 3 * M_PI / 2, false);
     CGPathCloseSubpath(loop);
