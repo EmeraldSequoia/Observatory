@@ -35,7 +35,7 @@ static const double EOOdometerButtonsWidth = 154;
 @interface EOTimeControllerView : UIView <UIGestureRecognizerDelegate, UITextFieldDelegate> {
     EOTimeStepper  *stepper;        // EOClock's; not retained
     EOClock        *clock;          // not retained
-    UIView         *nowBlock;       // over the altitude dial: the status, and Now ▶
+    UIView         *nowBlock;       // over the altitude dial: the status, and Now
     UIView         *driveBlock;     // over the azimuth dial: ◀ ‖ ▶
     UIView         *modeBlock;      // over the eclipse dial: the mode dial
     UIView         *stepBlock;      // over the equation-of-time dial: the pair
@@ -84,6 +84,10 @@ static const double EOOdometerButtonsWidth = 154;
 @property (readonly) UIView *odometer;
 
 - (id)initWithStepper:(EOTimeStepper *)aStepper clock:(EOClock *)aClock;
+
+// The Now buttons' icon (nowLive.png: a clock, broadcasting, "LIVE"), drawn at the given size in canvas units
+// and fine enough for the canvas's scaling; a template, so it takes the button's tint
++ (UIImage *)nowIconOfSize:(double)size;
 
 // The blocks' shape for the orientation, before EOClock centres them over the dials: a tall block
 // in landscape, where each side's two dials stack in a column, a square in portrait's corners

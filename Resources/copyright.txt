@@ -11,6 +11,8 @@ The astronomical algorithms and data tables used in Emerald Observatory are deri
 
 Images of the Earth have use terms described at http://visibleearth.nasa.gov/useterms.php
 
+The Now icon: Broadcast icons created by wanicon - Flaticon (https://www.flaticon.com/free-icons/broadcast)
+
 NTP code derived from public domain sources covered by the following copyrights:
 
 ***********************************************************************

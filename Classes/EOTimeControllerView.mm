@@ -575,13 +575,16 @@ static void styleAsFrame(UIView *view) {
         self.opaque = NO;
         self.backgroundColor = [UIColor clearColor];
 
-        // Over the altitude dial: what the clock is doing, and Now ▶, acting on the press
+        // Over the altitude dial: what the clock is doing, and Now (the live-clock icon), acting on the press
         nowBlock = [self addBlock];
         statusLabel = [self addLabelTo:nowBlock font:[UIFont fontWithName:@"Arial" size:12] color:rgb(0x88, 0xaa, 0xff)];
         statusLabel.numberOfLines = 2;
-        nowButton = [self addButtonTo:nowBlock title:[NSString stringWithFormat:@"%@ ▶", NSLocalizedString(@"Now", @"button: return the clock to the present")]
-                                 font:[UIFont fontWithName:@"Arial" size:18]];
+        nowButton = [self addButtonTo:nowBlock title:nil font:nil];
+        nowButton.accessibilityLabel = NSLocalizedString(@"Now", @"button: return the clock to the present");
+        nowButton.adjustsImageWhenHighlighted = NO;
+        nowButton.adjustsImageWhenDisabled = NO;    // dimmed by alpha instead (refresh)
         styleAsPlain(nowButton);
+        nowButton.tintColor = rgb(0xcc, 0xcc, 0xdd);
         [nowButton addTarget:self action:@selector(nowPressed:) forControlEvents:UIControlEventTouchDown];
 
         // Over the azimuth dial: the drive, its current setting lit
@@ -676,6 +679,17 @@ static void styleAsFrame(UIView *view) {
     [super dealloc];
 }
 
++ (UIImage *)nowIconOfSize:(double)size {
+    UIImage *source = [UIImage imageNamed:@"nowLive"];
+    UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat preferredFormat];
+    format.scale = 4;       // the screen's 2 or 3, and the canvas's scaling up to fill the window on top
+    UIGraphicsImageRenderer *renderer = [[[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(size, size) format:format] autorelease];
+    UIImage *icon = [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
+        [source drawInRect:CGRectMake(0, 0, size, size)];
+    }];
+    return [icon imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+}
+
 // The view spans the canvas but is only a holder: a touch between the blocks goes on to the display
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
     UIView *hit = [super hitTest:point withEvent:event];
@@ -702,6 +716,7 @@ static void styleAsFrame(UIView *view) {
     double nowTop = blockPad + statusHeight + gap;
     double nowHeight = fmin(64, h - nowTop - blockPad);
     nowButton.frame = CGRectMake(blockPad, nowTop + (h - nowTop - blockPad - nowHeight) / 2, inner, nowHeight);
+    [nowButton setImage:[EOTimeControllerView nowIconOfSize:nowHeight - 10] forState:UIControlStateNormal];
 
     // The drive: ▶ ‖ ◀ down a tall block, the lever's travel; ◀ ‖ ▶ across a square one
     if (h > w * 1.2) {

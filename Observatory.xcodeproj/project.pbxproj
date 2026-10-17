@@ -42,6 +42,7 @@
 		927B0E8A12A1DBC20009D05F /* eclipseRingMoon.png in Resources */ = {isa = PBXBuildFile; fileRef = 927B0E8212A1DBC20009D05F /* eclipseRingMoon.png */; };
 		927B0E8B12A1DBC20009D05F /* eclipseRingMoon@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = 927B0E8312A1DBC20009D05F /* eclipseRingMoon@2x.png */; };
 		927B0E8C12A1DBC20009D05F /* eclipseRingSun.png in Resources */ = {isa = PBXBuildFile; fileRef = 927B0E8412A1DBC20009D05F /* eclipseRingSun.png */; };
+		E0C1A1B2C3D4E5F60102030E /* nowLive.png in Resources */ = {isa = PBXBuildFile; fileRef = E0C1A1B2C3D4E5F60102030D /* nowLive.png */; };
 		927B0E8D12A1DBC20009D05F /* eclipseRingSun@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = 927B0E8512A1DBC20009D05F /* eclipseRingSun@2x.png */; };
 		927B0F0512A2E9370009D05F /* eclipseRingEarthShadow.png in Resources */ = {isa = PBXBuildFile; fileRef = 927B0F0412A2E9370009D05F /* eclipseRingEarthShadow.png */; };
 		927B0F2C12A476D10009D05F /* EOEclipseView.mm in Sources */ = {isa = PBXBuildFile; fileRef = 927B0F2B12A476D10009D05F /* EOEclipseView.mm */; };
@@ -312,6 +313,7 @@
 		927B0E8212A1DBC20009D05F /* eclipseRingMoon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = eclipseRingMoon.png; path = Resources/eclipseRingMoon.png; sourceTree = "<group>"; };
 		927B0E8312A1DBC20009D05F /* eclipseRingMoon@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "eclipseRingMoon@2x.png"; path = "Resources/eclipseRingMoon@2x.png"; sourceTree = "<group>"; };
 		927B0E8412A1DBC20009D05F /* eclipseRingSun.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = eclipseRingSun.png; path = Resources/eclipseRingSun.png; sourceTree = "<group>"; };
+		E0C1A1B2C3D4E5F60102030D /* nowLive.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = nowLive.png; path = Resources/nowLive.png; sourceTree = "<group>"; };
 		927B0E8512A1DBC20009D05F /* eclipseRingSun@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "eclipseRingSun@2x.png"; path = "Resources/eclipseRingSun@2x.png"; sourceTree = "<group>"; };
 		927B0F0412A2E9370009D05F /* eclipseRingEarthShadow.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = eclipseRingEarthShadow.png; path = Resources/eclipseRingEarthShadow.png; sourceTree = "<group>"; };
 		927B0F2A12A476D10009D05F /* EOEclipseView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = EOEclipseView.h; path = Classes/EOEclipseView.h; sourceTree = "<group>"; };
@@ -839,6 +841,7 @@
 				927B0E8212A1DBC20009D05F /* eclipseRingMoon.png */,
 				927B0E8312A1DBC20009D05F /* eclipseRingMoon@2x.png */,
 				927B0E8412A1DBC20009D05F /* eclipseRingSun.png */,
+				E0C1A1B2C3D4E5F60102030D /* nowLive.png */,
 				927B0E8512A1DBC20009D05F /* eclipseRingSun@2x.png */,
 				A9E3FE1311522450008E39AC /* sun.png */,
 				A9E3FD9C11521863008E39AC /* earth.png */,
@@ -1024,6 +1027,7 @@
 				927B0E8A12A1DBC20009D05F /* eclipseRingMoon.png in Resources */,
 				927B0E8B12A1DBC20009D05F /* eclipseRingMoon@2x.png in Resources */,
 				927B0E8C12A1DBC20009D05F /* eclipseRingSun.png in Resources */,
+				E0C1A1B2C3D4E5F60102030E /* nowLive.png in Resources */,
 				927B0E8D12A1DBC20009D05F /* eclipseRingSun@2x.png in Resources */,
 				927B0F0512A2E9370009D05F /* eclipseRingEarthShadow.png in Resources */,
 				927B0F7B12A47DF70009D05F /* sunEclipse.png in Resources */,

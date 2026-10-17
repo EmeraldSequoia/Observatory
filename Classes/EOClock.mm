@@ -458,7 +458,7 @@ BOOL timeChanged = false;
     [self setStatusBar:NULL];
 }
 
-// "Now ▶" left of Set / Done: shown while the time is not the present, whatever moved it there (the
+// Now (the live-clock icon) left of Set / Done: shown while the time is not the present, whatever moved it there (the
 // controller, or the eclipse demo), and the controller is closed (open, its own Now block has it); checked
 // from tick
 - (void)updateNowButton {
@@ -1566,7 +1566,7 @@ static double resetX;
 static double resetY;
 static double advButtonWidth;
 static double advButtonHeight;
-static const double nowButtonGap = 8;	// between "Now ▶" and Set / Done
+static const double nowButtonGap = 8;	// between Now and Set / Done
 static double odometerX;		// the time controller's odometer, centred above the main dial
 static double odometerY;
 
@@ -2038,10 +2038,12 @@ static bool localeIsCyrillic() {
     resetBut.titleLabel.adjustsFontSizeToFitWidth = YES;
     //resetBut.titleLabel.font = [UIFont fontWithName:@"Arial" size:18];
 
-    // "Now ▶", shown to its right while the time is not the present (updateNowButton), the two then centred as a pair
+    // Now, the live-clock icon, shown beside it while the time is not the present (updateNowButton)
     nowBut = [self createButtonAtX:resetX+(advButtonWidth+24+nowButtonGap)/2 Y:resetY width:advButtonWidth+24 height:advButtonHeight highlight:true
-			     text:[NSString stringWithFormat:@"%@ ▶", NSLocalizedString(@"Now", @"button: return the clock to the present")] color:[UIColor whiteColor]];
-    nowBut.titleLabel.adjustsFontSizeToFitWidth = YES;
+			     text:nil color:nil];
+    [nowBut setImage:[EOTimeControllerView nowIconOfSize:advButtonHeight - 4] forState:UIControlStateNormal];
+    nowBut.tintColor = [UIColor whiteColor];
+    nowBut.accessibilityLabel = NSLocalizedString(@"Now", @"button: return the clock to the present");
 
 #ifdef INNER_SUBDIALS
     // inner subdial hands
