@@ -32,7 +32,6 @@ class ClockTimeSyncObserver;
     EOBaseView		*view;
     NSMutableArray	*subviews;
     NSTimer		*theTimer;
-    UILabel		*dateLabel;
     UILabel		*bigDate;
     UILabel		*bigDate2;
     UILabel		*utcdayLabel;
@@ -154,7 +153,7 @@ class ClockTimeSyncObserver;
 @property (readonly) ESTimeLocAstroEnvironment *env;
 @property (readonly) bool noonOnTop, setMode;
 @property (readwrite) bool finishingHelp;
-@property (readonly) UILabel *dateLabel;
+@property (readonly) UIView *timeStrip;     // the time controller's odometer, where the strip was
 @property (readonly) UILabel *NTPStatusLabel;  // the sync dot in the lower left corner
 @property (readonly) UIInterfaceOrientation lastOrientation;
 

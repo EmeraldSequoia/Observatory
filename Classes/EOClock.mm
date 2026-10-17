@@ -61,6 +61,7 @@ static NSDateFormatter	*bigDateFormatter;
 static NSDateFormatter	*bigDate2Formatter;
 static NSDateFormatter	*utcDateFormatter;
 static NSDateFormatter	*tzFormatter;
+static NSDateFormatter	*stripZoneFormatter;
 double fullWidth,fullHeight;
 
 static const int    EOClockUpdate = 20;	// how many updates(ticks) per second
@@ -103,7 +104,7 @@ ESLocationAsString(ESLocation *location) {
 - (void)notifyTimeAdjustment;
 - (void)updateTimeStrip;
 - (void)updateTimeStripVisibility;
-- (void)placeTimePanel;
+- (void)placeTimePanelForOrientation:(UIInterfaceOrientation)orientation;
 - (void)openTimePanel;
 - (void)placeSetAndNowButtonsForOrientation:(UIInterfaceOrientation)orientation;
 - (void)updateScrubShield;
@@ -151,7 +152,7 @@ typedef enum eoseason {
 
 @implementation EOClock
 
-@synthesize time, env, noonOnTop, lastOrientation, setMode, dateLabel, NTPStatusLabel, finishingHelp;
+@synthesize time, env, noonOnTop, lastOrientation, setMode, NTPStatusLabel, finishingHelp;
 
 - (EOSeason)seasonForHereAndNow {
     bool north = env->location()->latitudeDegrees() >= 0;		    // equator counts as north
@@ -382,6 +383,8 @@ static NSString *const kEOAlarmNotificationIdentifier = @"EOAlarm";
 	[dateFormatter setDateFormat:@"EEE, yyyy MMM dd  HH:mm:ss zzz (ZZZ)"];
 	tzFormatter = [[NSDateFormatter alloc] init];
 	[tzFormatter setDateFormat:@"zzz"];
+	stripZoneFormatter = [[NSDateFormatter alloc] init];
+	[stripZoneFormatter setDateFormat:@"zzz (ZZZ)"];
 	bigDateFormatter = [[NSDateFormatter alloc] init];
 	[bigDateFormatter setDateFormat:@"MMM dd"];
 	bigDate2Formatter = [[NSDateFormatter alloc] init];
@@ -434,19 +437,18 @@ static NSString *const kEOAlarmNotificationIdentifier = @"EOAlarm";
 - (void)setupTimerAndDateLabel {
     ESAssert(theTimer == NULL);	    // do this only once
     theTimer = [NSTimer scheduledTimerWithTimeInterval:1.0/EOClockUpdate target:self selector:@selector(tick) userInfo:NULL repeats:true];
-    dateLabel = [[[UILabel alloc] initWithFrame:CGRectMake(0, -20, fullWidth, 20)] autorelease];
-    dateLabel.font = [UIFont boldSystemFontOfSize:14];
-    dateLabel.textAlignment = NSTextAlignmentCenter;
-    dateLabel.backgroundColor = [UIColor clearColor];
-    dateLabel.textColor = [UIColor whiteColor];
-    [view addSubview:dateLabel];
 }
 
 BOOL timeChanged = false;
 
-//// the time controller's strip along the top of the canvas: the displayed time, how far it is from the
-//// present, the location, and what the clock is doing.  Shown while the controller is open or the time
-//// is not the present; the status bar hides to make room (see setStatusBar:)
+//// the time controller's odometer, which replaces the strip along the top: the displayed time on its
+//// wheels, and on its second line what the clock is doing, how far it is from the present, the zone and
+//// the location.  Shown while the controller is open or the time is not the present; the status bar
+//// hides with it (see setStatusBar:)
+
+- (UIView *)timeStrip {
+    return timePanel.odometer;
+}
 
 - (bool)timeStripVisible {
     return setMode || !time->isCorrect();
@@ -460,52 +462,56 @@ BOOL timeChanged = false;
     if ([stepper isAtLimit]) {
 	status = [NSString stringWithFormat:@"%@  %@", status, NSLocalizedString(@"AT LIMIT", @"strip suffix: the time is clamped at the end of the supported range (4000 BCE to 2800 CE)")];
     }
-    NSString *when = [dateFormatter stringFromDate:[NSDate dateWithTimeIntervalSinceReferenceDate:time->currentTime()]];
+    NSString *zone = [stripZoneFormatter stringFromDate:[NSDate dateWithTimeIntervalSinceReferenceDate:time->currentTime()]];
+    // The location last, where the line truncates when it runs long
     if (!time->isCorrect()) {
-	dateLabel.text = [NSString stringWithFormat:@"%@  <%s>  %@  %@",
-			  when,
-			  time->representationOfDeltaOffsetUsingEnv(env).c_str(),
-			  ESLocationAsString(env->location()),
-			  status];
-	dateLabel.textColor = [UIColor colorWithRed:.75 green:0 blue:0 alpha:1];
+	[timePanel setInfoText:[NSString stringWithFormat:@"%@  <%s>  %@  %@",
+					 status,
+					 time->representationOfDeltaOffsetUsingEnv(env).c_str(),
+					 zone,
+					 ESLocationAsString(env->location())]
+			 color:[UIColor colorWithRed:1 green:0.35 blue:0.35 alpha:1]];
     } else {
-	dateLabel.text = [NSString stringWithFormat:@"%@  --  %@  %@",
-			  when,
-			  ESLocationAsString(env->location()),
-			  status];
-	dateLabel.textColor = [UIColor whiteColor];
+	[timePanel setInfoText:[NSString stringWithFormat:@"%@  %@  %@",
+					 status,
+					 zone,
+					 ESLocationAsString(env->location())]
+			 color:[UIColor whiteColor]];
     }
 }
 
-// Show or hide the strip (and the status bar with it) as the controller opens and closes and as the time
-// leaves and returns to the present.  The reorientation and Help choreography set both themselves.
+// Show or hide the odometer (and the status bar with it) as the controller opens and closes and as the
+// time leaves and returns to the present.  The reorientation and Help choreography set both themselves.
 - (void)updateTimeStripVisibility {
     if (aboutToReorient || finishingHelp) {
 	return;
     }
     bool visible = [self timeStripVisible];
-    if (dateLabel.hidden == !visible) {
+    if (self.timeStrip.hidden == !visible) {
 	return;
     }
-    dateLabel.hidden = !visible;
+    self.timeStrip.hidden = !visible;
+    if (visible) {
+	[self updateTimeStrip];
+	[timePanel refresh];
+    }
     [self setStatusBar:NULL];
 }
 
-// "Now ▶" beside Set / Done: shown while the time is not the present, whatever moved it there (the
-// controller, or the eclipse demo); checked from tick
+// "Now ▶" left of Set / Done: shown while the time is not the present, whatever moved it there (the
+// controller, or the eclipse demo), and the controller is closed (open, its own Now block has it); checked
+// from tick
 - (void)updateNowButton {
-    bool hidden = time->isCorrect();
+    bool hidden = setMode || time->isCorrect();
     if (nowBut.hidden != hidden) {
 	nowBut.hidden = hidden;
-	[self placeSetAndNowButtonsForOrientation:lastOrientation];	// Set slides over to make the pair, and back
     }
 }
 
-// Set / Done sits at resetX on its own; while "Now ▶" shows, the two are centred there as a pair
+// Set / Done and Now at the odometer's right end, where they stay whether it shows or not
 - (void)placeSetAndNowButtonsForOrientation:(UIInterfaceOrientation)orientation {
-    double halfPair = (advButtonWidth + 24 + nowButtonGap) / 2;
-    [self reorientSubView:resetBut toOrientation:orientation offsetBy:CGPointMake(nowBut.hidden ? resetX : resetX - halfPair, resetY)];
-    [self reorientSubView:nowBut toOrientation:orientation offsetBy:CGPointMake(resetX + halfPair, resetY)];
+    [self reorientSubView:resetBut toOrientation:orientation offsetBy:CGPointMake(resetX, resetY)];
+    [self reorientSubView:nowBut toOrientation:orientation offsetBy:CGPointMake(resetX - advButtonWidth - 24 - nowButtonGap, resetY)];
 }
 
 // The shield: a transparent button over everything while a scrub runs hands-free, so that the next press
@@ -536,8 +542,8 @@ BOOL timeChanged = false;
 //// A press on the display closes the panel (the web's rule) and goes on to do whatever it landed on: the
 //// recogniser is a long press of no duration, so it fires on the touch itself; it recognises alongside
 //// every other recogniser and cancels no touches, so the dials still cycle their planet and the map still
-//// opens the location picker.  The controller's own chrome is not the display: the panel, Set / Done,
-//// Now, the strip, Demo, the NTP corner, and the two full-canvas overlays (the alarm's snooze, the
+//// opens the location picker.  The controller's own chrome is not the display: its blocks and odometer,
+//// Set / Done, Now, Demo, the NTP corner, and the two full-canvas overlays (the alarm's snooze, the
 //// hands-free shield, whose press is a stop and nothing else).
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldReceiveTouch:(UITouch *)touch {
@@ -555,9 +561,6 @@ BOOL timeChanged = false;
 	if (hit == chrome) {
 	    return NO;
 	}
-    }
-    if (!dateLabel.hidden && CGRectContainsPoint(dateLabel.frame, [touch locationInView:view])) {
-	return NO;	// the strip takes no touches itself; they land on the base view
     }
     return YES;
 }
@@ -589,11 +592,24 @@ BOOL timeChanged = false;
     return altHand.planet;	// the controller's body for rise / set / transit until the user picks one
 }
 
-//// the time controller panel
+//// the time controller
 
-- (void)placeTimePanel {
-    // Its corner and limits are those of the nominal canvas around the clock centre
-    [timePanel placeWithClockCenter:[EOClock clockCenter] halfWidth:fullWidth/2 halfHeight:fullHeight/2];
+// Its blocks over the four small dials, which they hide while it is open; its odometer at the top
+- (void)placeTimePanelForOrientation:(UIInterfaceOrientation)orientation {
+    timePanel.frame = view.bounds;
+    [timePanel layoutForLandscape:UIInterfaceOrientationIsLandscape(orientation)];
+    [self reorientSubView:timePanel.nowBlock toOrientation:orientation offsetBy:CGPointMake(altX, altY)];
+    [self reorientSubView:timePanel.driveBlock toOrientation:orientation offsetBy:CGPointMake(azX, azY)];
+    [self reorientSubView:timePanel.modeBlock toOrientation:orientation offsetBy:CGPointMake(eclipseX, eclipseY)];
+    [self reorientSubView:timePanel.stepBlock toOrientation:orientation offsetBy:CGPointMake(EOTX, EOTY)];
+    [self reorientSubView:timePanel.odometer toOrientation:orientation offsetBy:CGPointMake(odometerX, odometerY)];
+}
+
+// Above every widget but Set / Done and Now, which sit over the odometer's right end
+- (void)bringTimePanelToFront {
+    [view bringSubviewToFront:timePanel];
+    [view bringSubviewToFront:resetBut];
+    [view bringSubviewToFront:nowBut];
 }
 
 - (void)openTimePanel {
@@ -601,13 +617,14 @@ BOOL timeChanged = false;
 	return;
     }
     setMode = true;
-    [view bringSubviewToFront:timePanel];
-    [timePanel refresh];
-    timePanel.hidden = false;
+    [self bringTimePanelToFront];
+    [timePanel setOpen:true];
 #ifndef NDEBUG
     demoBut.hidden = false;
+    [view bringSubviewToFront:demoBut];
 #endif
     [resetBut setTitle:NSLocalizedString(@"Done", @"Done") forState:UIControlStateNormal];
+    [self updateNowButton];
     [self updateTimeStripVisibility];
 }
 
@@ -617,7 +634,7 @@ BOOL timeChanged = false;
     }
     [timePanel prepareToHide];	// a hidden view never gets the release that would end a scrub
     setMode = false;
-    timePanel.hidden = true;
+    [timePanel setOpen:false];
     demoBut.hidden = true;
     [resetBut setTitle:NSLocalizedString(@"Set", @"Set (verb)") forState:UIControlStateNormal];
     // The eclipse demo (debug builds) borrows the location and time zone; closing the controller gives them back
@@ -627,6 +644,7 @@ BOOL timeChanged = false;
 	env->location()->setToUserLocation(demoLat, demoLng, 0/*accuracyInMeters*/);	// must be after setting of timezone
 	demoLat = demoLng = 0;
     }
+    [self updateNowButton];
     [self updateTimeStripVisibility];
 }
 
@@ -786,8 +804,6 @@ static bool firstAfterComingToForeground = true;
     [self updateScrubShield];
     if ([self timeStripVisible]) {
 	[self updateTimeStrip];
-    }
-    if (setMode) {
 	[timePanel refresh];
     }
 
@@ -818,6 +834,7 @@ static bool firstAfterComingToForeground = true;
     NSTimeZone *nsTZ = ESCalendar_nsTimeZone(ESCalendar_localTimeZone());
     [dateFormatter setTimeZone:nsTZ];
     [tzFormatter setTimeZone:nsTZ];
+    [stripZoneFormatter setTimeZone:nsTZ];
     [bigDateFormatter setTimeZone:nsTZ];
     [bigDate2Formatter setTimeZone:nsTZ];
 }
@@ -1578,7 +1595,9 @@ static double resetX;
 static double resetY;
 static double advButtonWidth;
 static double advButtonHeight;
-static const double nowButtonGap = 8;	// between Set / Done and "Now ▶"
+static const double nowButtonGap = 8;	// between "Now ▶" and Set / Done
+static double odometerX;		// the time controller's odometer, centred above the main dial
+static double odometerY;
 
 - (void)initializeConstantsForOrientation:(UIInterfaceOrientation)orientation {
     headerLineWidth = 2;
@@ -1634,8 +1653,8 @@ static const double nowButtonGap = 8;	// between Set / Done and "Now ▶"
 	fDSTY = mainY-341;
 	sDSTX = mainX-225;
 	sDSTY = mainY-292;
-	resetX = BMX;
-	resetY = BMY-headerHeight/2-22;
+	odometerX = 0;
+	odometerY = mainY + mainR + 28;		// between the header and the main dial
     } else {	 // layout parameters for landscape:
 	fullWidth = 1024;
 	fullHeight = 768;
@@ -1675,9 +1694,12 @@ static const double nowButtonGap = 8;	// between Set / Done and "Now ▶"
 	EOTY = mainY-extDialOffY*3.5;
 	eclipseX = mainX+extDialOffX;
 	eclipseY = mainY+extDialOffY;
-	resetX = 0;
-	resetY = EOSCREENWIDTH/2 - EOSTATICSTATUSBARHEIGHT - 17;
+	odometerX = 0;
+	odometerY = 348;			// above the main dial, between the Moon and the map
     }
+    // Set / Done at the odometer's right end, on its first line, Now to its left (placeSetAndNowButtonsForOrientation:)
+    resetX = odometerX + EOOdometerWidth/2 - 4 - (advButtonWidth+24)/2;
+    resetY = odometerY + EOOdometerHeight/2 - EOOdometerRowHeight/2;
     EVX = BMX + centerX;
     EVY = BMY + centerY;
     
@@ -2251,12 +2273,12 @@ static bool localeIsCyrillic() {
 
     [self setupTimerAndDateLabel];
 
-    // The time controller, in place of the old row of stepper buttons: its model, then its panel above
-    // every other widget (the strip it writes is the date label the timer setup just created)
+    // The time controller, in place of the old row of stepper buttons: its model, then its blocks and
+    // odometer above every other widget
     stepper = [[EOTimeStepper alloc] initWithWatchTime:time env:env client:self ticksPerSecond:EOClockUpdate];
     timePanel = [[EOTimeControllerView alloc] initWithStepper:stepper clock:self];
     [view addSubview:timePanel];
-    [self placeTimePanel];
+    [self bringTimePanelToFront];
     // A press on the display closes it (gestureRecognizer:shouldReceiveTouch: says what the display is)
     displayPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(displayPressed:)];
     displayPress.minimumPressDuration = 0;
@@ -2372,7 +2394,7 @@ static bool localeIsCyrillic() {
 	[self reorientSubView:mercuryHand toOrientation:newOrientation offsetBy:CGPointMake(mainX, mainY)];
 
 	[self placeSetAndNowButtonsForOrientation:newOrientation];
-	[self placeTimePanel];
+	[self placeTimePanelForOrientation:newOrientation];
 
 #ifdef SEASONS
 	[self reorientSubView:springIcon toOrientation:newOrientation offsetBy:CGPointMake(yearX-seasonIconOffset, yearY+seasonIconOffset)];
@@ -2458,8 +2480,6 @@ static bool localeIsCyrillic() {
 	[self resizeSubView:moonHand masterScale:ringMasterScale];
 
 	lastOrientation = newOrientation;
-	
-	[self reorientSubView:dateLabel toOrientation:newOrientation offsetBy:CGPointMake(0, fullHeight/2-20)];
     }
 }
 
@@ -2511,7 +2531,7 @@ static bool localeIsCyrillic() {
     // Not [UIApplication setStatusBarHidden:], which is a no-op as of iOS 27; the view controller owns this now
     OrreryAppDelegate *appDelegate = (OrreryAppDelegate *)[[UIApplication sharedApplication] delegate];
     appDelegate.mainViewController.statusBarHidden = false;
-    dateLabel.hidden = true;
+    self.timeStrip.hidden = true;
 }
 
 - (void)resetAfterOrientationChangeToOrientation:(UIInterfaceOrientation)newOrientation newSize:(CGSize)newSize {
@@ -2522,7 +2542,7 @@ static bool localeIsCyrillic() {
         finishingHelp = false;
     } else {
 	[self setStatusBar:NULL];
-        dateLabel.hidden = ![self timeStripVisible];
+        self.timeStrip.hidden = ![self timeStripVisible];
     }
 }
 

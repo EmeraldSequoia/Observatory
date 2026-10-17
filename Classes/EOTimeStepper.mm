@@ -192,8 +192,8 @@ static const int numBodies = sizeof(bodyPlanets) / sizeof(bodyPlanets[0]);
 
 // The same jumps the old row of buttons made; DST days, month ends and Feb 29 are the
 // ESWatchTime methods' business, as before
-- (void)advanceOneUnitInDirection:(int)direction {
-    switch (unit) {
+- (void)advanceUnit:(EOTimeStepUnit)aUnit inDirection:(int)direction {
+    switch (aUnit) {
       case EOTimeStepCentury:
         time->advanceByYears(100 * direction, env);
         break;
@@ -224,7 +224,16 @@ static const int numBodies = sizeof(bodyPlanets) / sizeof(bodyPlanets[0]);
     ESAssert(direction == 1 || direction == -1);
     ESAssert(![EOTimeStepper unitIsAstro:unit]);
     time->stop();     // every step freezes the clock, as the old row's buttons did
-    [self advanceOneUnitInDirection:direction];
+    [self advanceUnit:unit inDirection:direction];
+    [client timeDidChange];
+}
+
+- (void)rollUnit:(EOTimeStepUnit)aUnit inDirection:(int)direction {
+    ESAssert(direction == 1 || direction == -1);
+    ESAssert(![EOTimeStepper unitIsAstro:aUnit]);
+    [self endPress];
+    time->stop();
+    [self advanceUnit:aUnit inDirection:direction];
     [client timeDidChange];
 }
 
@@ -350,6 +359,13 @@ static const int numBodies = sizeof(bodyPlanets) / sizeof(bodyPlanets[0]);
     return !time->isStopped();
 }
 
+- (int)runDirection {
+    if (time->isStopped()) {
+        return 0;
+    }
+    return time->warp() < 0 ? -1 : 1;
+}
+
 - (bool)isAtPresent {
     return time->isCorrect();
 }
@@ -365,10 +381,10 @@ static int clampInt(int value, int low, int high) {
 }
 
 // A typed date and time, in the clock's zone through the hybrid calendar (Julian before 1582-10-15),
-// at the zone's offset for that instant; seconds go to zero.  Outside the range the astronomy supports
+// at the zone's offset for that instant.  Outside the range the astronomy supports
 // (4000 BCE to 2801 CE) the time is clamped to the range's end, and the clock freezes there as it does
 // anywhere.
-- (bool)setEra:(int)era year:(int)year month:(int)month day:(int)day hour:(int)hour minute:(int)minute {
+- (bool)setEra:(int)era year:(int)year month:(int)month day:(int)day hour:(int)hour minute:(int)minute second:(int)second {
     [self endPress];
     ESDateComponents cs;
     cs.era = era ? 1 : 0;
@@ -377,7 +393,7 @@ static int clampInt(int value, int low, int high) {
     cs.day = clampInt(day, 1, 31);
     cs.hour = clampInt(hour, 0, 23);
     cs.minute = clampInt(minute, 0, 59);
-    cs.seconds = 0;
+    cs.seconds = clampInt(second, 0, 59);
     ESTimeInterval target = ESCalendar_timeIntervalFromLocalDateComponents(env->estz(), &cs);
     bool inRange = true;
     if (target < ESMinimumSupportedAstroDate) {

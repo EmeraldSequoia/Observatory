@@ -89,6 +89,9 @@ typedef enum EOTimeScrubState {
 // One calendar step: freezes the clock, moves it one unit, has the display redraw
 - (void)stepInDirection:(int)direction;
 
+// The same for a given calendar unit, whatever the selected one: an odometer wheel rolled by a notch
+- (void)rollUnit:(EOTimeStepUnit)aUnit inDirection:(int)direction;
+
 // The pair's touches.  A press steps at once — for an astro unit it searches and jumps, and
 // answers false when there is no such event here — and, for a calendar unit, arms the hold.
 // A release on the button ends the scrub (endPress); a release off it after the hold has engaged
@@ -111,14 +114,15 @@ typedef enum EOTimeScrubState {
 - (void)playReverse;
 - (void)now;
 - (bool)isRunning;      // the clock is moving
+- (int)runDirection;    // 0 stopped, 1 forward, -1 backward
 - (bool)isAtPresent;    // it shows the present, so there is nothing to return to
 
-// The date fields: the displayed time's components in the clock's zone; a typed date and time
-// (seconds zero), composed through the hybrid calendar and clamped to the range the astronomy
+// The odometer: the displayed time's components in the clock's zone; a typed date and time,
+// composed through the hybrid calendar and clamped to the range the astronomy
 // supports, where the clock freezes — answers false when it had to clamp; and whether the time
 // sits at that range's end
 - (void)dateComponents:(ESDateComponents *)cs;
-- (bool)setEra:(int)era year:(int)year month:(int)month day:(int)day hour:(int)hour minute:(int)minute;
+- (bool)setEra:(int)era year:(int)year month:(int)month day:(int)day hour:(int)hour minute:(int)minute second:(int)second;
 - (bool)isAtLimit;
 
 @end
