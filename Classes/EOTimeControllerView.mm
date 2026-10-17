@@ -460,7 +460,7 @@ static double angleForPosition(int i) {
     nowButton.frame = CGRectMake(blockPad, (h - nowHeight) / 2, inner, nowHeight);
 
     // The drive: ▶ ‖ ◀ down a tall block, the lever's travel; ◀ ‖ ▶ across a square one
-    if (h > w * 1.3) {
+    if (h > w * 1.2) {
         double buttonHeight = (h - 2 * blockPad - 2 * gap) / 3;
         playButton.frame = CGRectMake(blockPad, blockPad, inner, buttonHeight);
         pauseButton.frame = CGRectMake(blockPad, blockPad + buttonHeight + gap, inner, buttonHeight);
