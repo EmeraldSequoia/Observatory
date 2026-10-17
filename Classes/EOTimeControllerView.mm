@@ -452,6 +452,7 @@ static double angleForPosition(int i) {
         styleAsPlain(keyboardButton);
         keyboardButton.tintColor = rgb(0x99, 0x99, 0xbb);
         keyboardButton.adjustsImageWhenHighlighted = NO;
+        odometer.hidden = YES;
         [keyboardButton addTarget:self action:@selector(keyboardTapped:) forControlEvents:UIControlEventTouchUpInside];
 
         [self layoutOdometer];
@@ -549,7 +550,6 @@ static double angleForPosition(int i) {
     for (UIView *block in [NSArray arrayWithObjects:nowBlock, driveBlock, modeBlock, stepBlock, nil]) {
         block.hidden = !open;
     }
-    keyboardButton.hidden = !open;
     if (open) {
         [self refresh];
     }
@@ -656,13 +656,9 @@ static double angleForPosition(int i) {
     return fabs(velocity.y) > fabs(velocity.x);
 }
 
-// Up rolls the wheel on, down rolls it back, a unit per notch of travel.  With the controller closed, the
-// drag opens it first, as Set would.
+// Up rolls the wheel on, down rolls it back, a unit per notch of travel
 - (void)wheelPanned:(UIPanGestureRecognizer *)recognizer {
     if (recognizer.state == UIGestureRecognizerStateBegan) {
-        if (!open) {
-            [clock openTimePanel];
-        }
         rollCarry = 0;
     }
     rollCarry -= [recognizer translationInView:recognizer.view].y;
@@ -764,9 +760,6 @@ static double angleForPosition(int i) {
 }
 
 - (void)eraTapped:(UIButton *)sender {
-    if (!open) {
-        [clock openTimePanel];
-    }
     [self showEra:!shownBCE];
     [self applyDateFields];
 }

@@ -280,7 +280,7 @@ static NSString *const kEOAlarmNotificationIdentifier = @"EOAlarm";
     if (appDelegate) {
         MainViewController *mainViewController = appDelegate.mainViewController;
         if (mainViewController) {
-            mainViewController.statusBarHidden = !finishingHelp && ([self screenIsMirrored] || [self timeControllerActive]);
+            mainViewController.statusBarHidden = !finishingHelp && ([self screenIsMirrored] || [self timeStripVisible]);
         }
     }
 }
@@ -438,24 +438,28 @@ static NSString *const kEOAlarmNotificationIdentifier = @"EOAlarm";
 BOOL timeChanged = false;
 
 //// the time controller's odometer, which replaces the strip along the top: the displayed time on its
-//// wheels, always shown (but for the reorientation and Help choreography, which hide and show it), and a
-//// drag on a wheel opens the controller.  The status bar hides while the controller is open or the time
-//// is not the present (see setStatusBar:).
+//// wheels, shown only while the controller is open (closed, the clock itself shows the time, and Now
+//// beside Set says when it is not the present).  The status bar hides while it shows (see setStatusBar:).
 
 - (UIView *)timeStrip {
     return timePanel.odometer;
 }
 
-- (bool)timeControllerActive {
-    return setMode || !time->isCorrect();
+- (bool)timeStripVisible {
+    return setMode;
 }
 
-// Show or hide the status bar as the controller opens and closes and as the time leaves and returns to
-// the present.  The reorientation and Help choreography set it themselves.
+// Show or hide the odometer (and the status bar with it) as the controller opens and closes.  The
+// reorientation and Help choreography set both themselves.
 - (void)updateTimeStripVisibility {
     if (aboutToReorient || finishingHelp) {
 	return;
     }
+    bool visible = [self timeStripVisible];
+    if (self.timeStrip.hidden == !visible) {
+	return;
+    }
+    self.timeStrip.hidden = !visible;
     [self setStatusBar:NULL];
 }
 
@@ -469,7 +473,8 @@ BOOL timeChanged = false;
     }
 }
 
-// Set / Done and Now at the odometer's right end, where they stay whether it shows or not
+// Set / Done and Now at the odometer's right end, where they stay whether it shows or not, so that Set
+// is still under the finger as Done
 - (void)placeSetAndNowButtonsForOrientation:(UIInterfaceOrientation)orientation {
     [self reorientSubView:resetBut toOrientation:orientation offsetBy:CGPointMake(resetX, resetY)];
     [self reorientSubView:nowBut toOrientation:orientation offsetBy:CGPointMake(resetX - advButtonWidth - 24 - nowButtonGap, resetY)];
@@ -763,7 +768,9 @@ static bool firstAfterComingToForeground = true;
     [stepper scrubTick];	// a held ◀ or ▶ moves the time one unit per tick, as the old row did
     [self updateNowButton];
     [self updateScrubShield];
-    [timePanel refresh];
+    if (setMode) {
+	[timePanel refresh];
+    }
 
     if (!inBackground) {
 	// now get each part to redraw itself if its target time is reached
@@ -2499,7 +2506,7 @@ static bool localeIsCyrillic() {
         finishingHelp = false;
     } else {
 	[self setStatusBar:NULL];
-        self.timeStrip.hidden = false;
+        self.timeStrip.hidden = ![self timeStripVisible];
     }
 }
 

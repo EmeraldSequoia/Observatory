@@ -6,8 +6,8 @@
 //  clock's status over Now, the drive ◀ ‖ ▶, the mode dial with its body, and the ◀ ▶ pair: tap to
 //  step, hold to scrub, lift off to run hands-free), and the odometer along the top, which replaces
 //  the old strip: wheels for the displayed date and time, each rolled by a vertical drag, and a
-//  keyboard switch that, while on, turns them into fields to type into instead.  The odometer always
-//  shows, and a drag on a wheel opens the controller as Set does.
+//  keyboard switch that, while on, turns them into fields to type into instead.  The odometer shows
+//  only while the controller is open (EOClock's timeStripVisible).
 //
 //  The view itself spans the canvas and takes no touches; EOClock places its blocks where the
 //  dials are and its odometer where the strip goes (moveClockWidgetsForOrientation:), with
@@ -82,7 +82,7 @@ static const double EOOdometerButtonsWidth = 154;
 // in landscape, where each side's two dials stack in a column, a square in portrait's corners
 - (void)layoutForLandscape:(bool)isLandscape;
 
-// Set mode: the blocks show, and the keyboard switch
+// Set mode: the blocks show (EOClock shows the odometer)
 - (void)setOpen:(bool)isOpen;
 
 // Once per clock tick while the odometer or the blocks show

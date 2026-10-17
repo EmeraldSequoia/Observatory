@@ -188,8 +188,7 @@ class ClockTimeSyncObserver;
 + (ESWatchTime *)alarmTime;
 + (void)setupLocalNotificationForAlarmStateEnabled:(bool)enabled;
 - (void)notifyTimeAdjustment;
-- (bool)timeControllerActive;	// the controller is open or the time is not the present: the status bar hides
-- (void)openTimePanel;
+- (bool)timeStripVisible;	// the odometer, where the strip was: the controller is open (the status bar hides)
 - (void)closeTimePanel;
 - (void)timeDidChange;		// from the time stepper: the display must redraw
 - (void)transportDidChange;	// from the time stepper: the views re-arm their schedules
