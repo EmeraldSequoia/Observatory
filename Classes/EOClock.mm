@@ -557,7 +557,12 @@ BOOL timeChanged = false;
 
 // Its blocks over the four small dials, which they hide while it is open; its odometer at the top
 - (void)placeTimePanelForOrientation:(UIInterfaceOrientation)orientation {
-    timePanel.frame = view.bounds;
+    // The same coordinates as the base view, whose bounds origin need not be zero (it shifts to centre the clock
+    // in the safe area): its frame and its bounds both the base view's bounds, so what reorientSubView: places
+    // in it lands where it would in the base view
+    CGRect canvas = view.bounds;
+    timePanel.bounds = canvas;
+    timePanel.center = CGPointMake(CGRectGetMidX(canvas), CGRectGetMidY(canvas));
     [timePanel layoutForLandscape:UIInterfaceOrientationIsLandscape(orientation)];
     [self reorientSubView:timePanel.nowBlock toOrientation:orientation offsetBy:CGPointMake(altX, altY)];
     [self reorientSubView:timePanel.driveBlock toOrientation:orientation offsetBy:CGPointMake(azX, azY)];
