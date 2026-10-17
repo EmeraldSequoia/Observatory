@@ -7,6 +7,7 @@
 
 #import "EOTimeControllerView.h"
 #import "EOClock.h"
+#import "EOBrass.h"
 #import "Utilities.h"
 #import <QuartzCore/QuartzCore.h>
 
@@ -17,8 +18,7 @@ static const double portraitBlockWidth = 130;
 static const double portraitBlockHeight = 130;
 static const double landscapeBlockWidth = 170;
 static const double landscapeBlockHeight = 215;
-static const double blockPad = 8;
-static const double blockRadius = 14;
+static const double blockPad = 10;              // inside the brass rim
 static const double buttonRadius = 8;
 static const double gap = 4;
 static const double labelHeight = 18;           // the pair's label
@@ -277,13 +277,9 @@ static double angleForPosition(int i) {
 
 @synthesize nowBlock, driveBlock, modeBlock, stepBlock, odometer;
 
+// A block: iron in a brass rim, solid, so the dial beneath shows only through a scrub's fade
 - (UIView *)addBlock {
-    UIView *block = [[UIView alloc] initWithFrame:CGRectZero];
-    block.opaque = NO;      // the rounded corners
-    block.backgroundColor = rgb(0x1a, 0x1a, 0x2e);   // solid: the dial beneath shows only through a scrub's fade
-    block.layer.cornerRadius = blockRadius;
-    block.layer.borderWidth = 1;
-    block.layer.borderColor = rgb(0x3a, 0x3a, 0x5e).CGColor;
+    UIView *block = [[EOBrassPlateView alloc] initWithFrame:CGRectZero];
     [self addSubview:block];
     [block release];
     return block;

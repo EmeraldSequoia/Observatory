@@ -96,6 +96,7 @@
 		A97AA0A811E43D4A009F5C00 /* EOScheduledView.mm in Sources */ = {isa = PBXBuildFile; fileRef = A97AA0A711E43D4A009F5C00 /* EOScheduledView.mm */; };
 		E0C1A1B2C3D4E5F601020304 /* EOTimeStepper.mm in Sources */ = {isa = PBXBuildFile; fileRef = E0C1A1B2C3D4E5F601020302 /* EOTimeStepper.mm */; };
 		E0C1A1B2C3D4E5F601020308 /* EOTimeControllerView.mm in Sources */ = {isa = PBXBuildFile; fileRef = E0C1A1B2C3D4E5F601020306 /* EOTimeControllerView.mm */; };
+		E0C1A1B2C3D4E5F60102030C /* EOBrass.mm in Sources */ = {isa = PBXBuildFile; fileRef = E0C1A1B2C3D4E5F60102030A /* EOBrass.mm */; };
 		A98AE2931815C760007924CC /* icon-76.png in Resources */ = {isa = PBXBuildFile; fileRef = A98AE2911815C760007924CC /* icon-76.png */; };
 		A98AE2941815C760007924CC /* icon-152.png in Resources */ = {isa = PBXBuildFile; fileRef = A98AE2921815C760007924CC /* icon-152.png */; };
 		A98AE2991815C7CF007924CC /* icon-40.png in Resources */ = {isa = PBXBuildFile; fileRef = A98AE2971815C7CF007924CC /* icon-40.png */; };
@@ -391,6 +392,8 @@
 		E0C1A1B2C3D4E5F601020302 /* EOTimeStepper.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = EOTimeStepper.mm; path = Classes/EOTimeStepper.mm; sourceTree = "<group>"; };
 		E0C1A1B2C3D4E5F601020305 /* EOTimeControllerView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = EOTimeControllerView.h; path = Classes/EOTimeControllerView.h; sourceTree = "<group>"; };
 		E0C1A1B2C3D4E5F601020306 /* EOTimeControllerView.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = EOTimeControllerView.mm; path = Classes/EOTimeControllerView.mm; sourceTree = "<group>"; };
+		E0C1A1B2C3D4E5F601020309 /* EOBrass.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = EOBrass.h; path = Classes/EOBrass.h; sourceTree = "<group>"; };
+		E0C1A1B2C3D4E5F60102030A /* EOBrass.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = EOBrass.mm; path = Classes/EOBrass.mm; sourceTree = "<group>"; };
 		A98AE2911815C760007924CC /* icon-76.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "icon-76.png"; path = "Resources/icon-76.png"; sourceTree = "<group>"; };
 		A98AE2921815C760007924CC /* icon-152.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "icon-152.png"; path = "Resources/icon-152.png"; sourceTree = "<group>"; };
 		A98AE2971815C7CF007924CC /* icon-40.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "icon-40.png"; path = "Resources/icon-40.png"; sourceTree = "<group>"; };
@@ -760,6 +763,8 @@
 				E0C1A1B2C3D4E5F601020302 /* EOTimeStepper.mm */,
 				E0C1A1B2C3D4E5F601020305 /* EOTimeControllerView.h */,
 				E0C1A1B2C3D4E5F601020306 /* EOTimeControllerView.mm */,
+				E0C1A1B2C3D4E5F601020309 /* EOBrass.h */,
+				E0C1A1B2C3D4E5F60102030A /* EOBrass.mm */,
 				92FEA68B1162CC0F008D16D6 /* EOShuffleView.h */,
 				92FEA68C1162CC0F008D16D6 /* EOShuffleView.mm */,
 			);
@@ -1165,6 +1170,7 @@
 				A97AA0A811E43D4A009F5C00 /* EOScheduledView.mm in Sources */,
 				E0C1A1B2C3D4E5F601020304 /* EOTimeStepper.mm in Sources */,
 				E0C1A1B2C3D4E5F601020308 /* EOTimeControllerView.mm in Sources */,
+				E0C1A1B2C3D4E5F60102030C /* EOBrass.mm in Sources */,
 				927B0E4612A1D8140009D05F /* EOEclipseRingImageView.mm in Sources */,
 				927B0F2C12A476D10009D05F /* EOEclipseView.mm in Sources */,
 				927B13A412AC5CD70009D05F /* EOMoonAgeView.mm in Sources */,
