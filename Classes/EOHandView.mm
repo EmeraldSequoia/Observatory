@@ -24,11 +24,19 @@
 
 @synthesize length, width, planet;
 
+// The transport changed (Pause, Play, a step): the next update animates to the new course.  A hand still
+// animating toward where the old course would have taken it stops where it is first; the animation's end then
+// brings that update (animationDone:).
 - (void)resetTarget {
     [super resetTarget];
-    if (!animationInProgress) {
-	first = true;
+    if (animationInProgress) {
+	CALayer *shown = (CALayer *)self.layer.presentationLayer;
+	if (shown) {
+	    self.layer.transform = shown.transform;
+	}
+	[self.layer removeAllAnimations];
     }
+    first = true;
 }
 
 - (EOHandView *)initWithFrame:(CGRect)frame kind:(EOHandKind)aKind update:(double)aUpdate strokeColor:(UIColor *)asColor fillColor:(UIColor *)afColor {
@@ -153,8 +161,9 @@
     NSTimeInterval now = tim->secondsSinceMidnightValueUsingEnv(env);
     bool rotateLayer = !([self isKindOfClass:[EOHandTriangleView class]] || [self isKindOfClass:[EOEclipseView class]]);
     if (first && rotateLayer) {
-	// where it will be when the animation is done: a second on, or a second back while the clock runs backward
-	now += tim->runningBackward() ? -EOHANDAMIMATIONDURATION : EOHANDAMIMATIONDURATION;
+	// where it will be when the animation is done: as far as the clock goes meanwhile (forward, back, or
+	// nowhere while it is stopped)
+	now += tim->warp() * EOHANDAMIMATIONDURATION;
     }
     
     if (kind >= EOFirstAstro) {
