@@ -73,6 +73,7 @@ static const double EOOdometerButtonsWidth = 154;
     bool           faded;           // the scrub fade is on
     bool           shownBCE;        // the era wheel as drawn
     double         rollCarry;       // a wheel drag's travel not yet turned into notches
+    UITextField    *rollingWheel;   // the wheel the drag started on (gestureRecognizerShouldBegin:)
     CADisplayLink  *shrinkLink;     // while closing: fades each view out near the end of its shrink (shrinkStep)
     CGRect         shrinkTarget;    // the rect they shrink into
 }

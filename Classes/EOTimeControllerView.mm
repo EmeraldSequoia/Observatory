@@ -611,8 +611,8 @@ static void styleAsFrame(UIView *view) {
     return label;
 }
 
-// An odometer wheel: a vertical drag rolls its unit (wheelPanned:); it takes digits from the keyboard only
-// while the keyboard switch is on (keyboardTapped:)
+// An odometer wheel: a vertical drag on it rolls its unit (the odometer's, wheelPanned:); it takes digits
+// from the keyboard only while the keyboard switch is on (keyboardTapped:)
 - (UITextField *)addWheelWithPlaceholder:(NSString *)placeholder unit:(EOTimeStepUnit)unit {
     UITextField *field = [[UITextField alloc] initWithFrame:CGRectZero];
     field.font = [UIFont monospacedDigitSystemFontOfSize:18 weight:UIFontWeightMedium];
@@ -645,10 +645,7 @@ static void styleAsFrame(UIView *view) {
     field.inputAssistantItem.trailingBarButtonGroups = [NSArray array];
     field.delegate = self;
     field.tag = unit;
-    UIPanGestureRecognizer *roll = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(wheelPanned:)];
-    roll.delegate = self;
-    [field addGestureRecognizer:roll];
-    [roll release];
+    field.userInteractionEnabled = NO;      // a field only while the keyboard switch is on (setEntering:)
     [odometer addSubview:field];
     [field release];
     return field;
@@ -768,6 +765,14 @@ static void styleAsFrame(UIView *view) {
         keyboardButton.adjustsImageWhenHighlighted = NO;
         odometer.hidden = YES;
         [keyboardButton addTarget:self action:@selector(keyboardTapped:) forControlEvents:UIControlEventTouchUpInside];
+        // The wheels' drag is the odometer's, not the fields': a text field keeps a mouse's click-drag for
+        // selecting its text (an iPad app on a Mac), even with editing refused.  A trackpad's or a mouse
+        // wheel's scroll over a wheel rolls it too.
+        UIPanGestureRecognizer *roll = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(wheelPanned:)];
+        roll.delegate = self;
+        roll.allowedScrollTypesMask = UIScrollTypeMaskAll;
+        [odometer addGestureRecognizer:roll];
+        [roll release];
 
         [self layoutOdometer];
         [self layoutForLandscape:false];
@@ -1091,18 +1096,33 @@ static CGAffineTransform transformOnto(UIView *view, CGRect rect) {
     return nil;
 }
 
-// A wheel rolls only for a mostly vertical drag, and not while the keyboard switch makes it a field
+// A wheel rolls only for a mostly vertical drag that started on it, and not while the keyboard switch makes
+// it a field; a drag from anywhere else on the odometer (the era, the keyboard button) is theirs
 - (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)recognizer {
     if (![recognizer isKindOfClass:[UIPanGestureRecognizer class]] || entering) {
         return NO;
     }
-    CGPoint velocity = [(UIPanGestureRecognizer *)recognizer velocityInView:recognizer.view];
-    return fabs(velocity.y) > fabs(velocity.x);
+    UIPanGestureRecognizer *pan = (UIPanGestureRecognizer *)recognizer;
+    CGPoint velocity = [pan velocityInView:odometer];
+    if (fabs(velocity.y) <= fabs(velocity.x)) {
+        return NO;
+    }
+    // Where it started: the pan has moved a little by now
+    CGPoint location = [pan locationInView:odometer];
+    CGPoint translation = [pan translationInView:odometer];
+    CGPoint start = CGPointMake(location.x - translation.x, location.y - translation.y);
+    rollingWheel = nil;
+    for (UITextField *field in [NSArray arrayWithObjects:yearField, monthField, dayField, hourField, minuteField, secondField, nil]) {
+        if (CGRectContainsPoint(field.frame, start)) {
+            rollingWheel = field;
+        }
+    }
+    return rollingWheel != nil;
 }
 
 // Up rolls the wheel on, down rolls it back, a unit per notch of travel; the wheel wears a gold rim while it rolls
 - (void)wheelPanned:(UIPanGestureRecognizer *)recognizer {
-    UITextField *wheel = (UITextField *)recognizer.view;
+    UITextField *wheel = rollingWheel;
     if (recognizer.state == UIGestureRecognizerStateBegan) {
         rollCarry = 0;
         styleWheel(wheel, false, true);
@@ -1110,9 +1130,9 @@ static CGAffineTransform transformOnto(UIView *view, CGRect rect) {
         styleWheel(wheel, entering, false);     // ended, cancelled or failed
         return;
     }
-    rollCarry -= [recognizer translationInView:recognizer.view].y;
-    [recognizer setTranslation:CGPointZero inView:recognizer.view];
-    EOTimeStepUnit unit = (EOTimeStepUnit)recognizer.view.tag;
+    rollCarry -= [recognizer translationInView:odometer].y;
+    [recognizer setTranslation:CGPointZero inView:odometer];
+    EOTimeStepUnit unit = (EOTimeStepUnit)wheel.tag;
     while (rollCarry >= notch) {
         [stepper rollUnit:unit inDirection:1];
         rollCarry -= notch;
@@ -1137,6 +1157,7 @@ static CGAffineTransform transformOnto(UIView *view, CGRect rect) {
     entering = on;
     for (UITextField *field in [NSArray arrayWithObjects:yearField, monthField, dayField, hourField, minuteField, secondField, nil]) {
         styleWheel(field, on, false);
+        field.userInteractionEnabled = on;
     }
     if (on) {
         styleAsActive(keyboardButton);
