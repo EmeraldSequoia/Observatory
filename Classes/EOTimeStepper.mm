@@ -335,9 +335,12 @@ static const int numBodies = sizeof(bodyPlanets) / sizeof(bodyPlanets[0]);
 - (bool)pressInDirection:(int)direction {
     [self endPress];  // a second finger, or a press whose release never came
     if ([EOTimeStepper unitIsAstro:unit]) {
-        return [self astroJumpInDirection:direction];    // tap-only: each tap is a search, so there is nothing to hold
+        if (![self astroJumpInDirection:direction]) {
+            return false;   // no such event here: nothing to hold for
+        }
+    } else {
+        [self stepInDirection:direction];
     }
-    [self stepInDirection:direction];
     scrubDirection = direction;
     scrubState = EOTimeScrubPending;
     holdTimer = [NSTimer scheduledTimerWithTimeInterval:EOHoldDelay target:self selector:@selector(holdTimerFired:) userInfo:nil repeats:NO];
@@ -382,7 +385,14 @@ static const int numBodies = sizeof(bodyPlanets) / sizeof(bodyPlanets[0]);
 }
 
 - (void)scrubTick {
-    if ([self isScrubbing]) {
+    if (![self isScrubbing]) {
+        return;
+    }
+    if ([EOTimeStepper unitIsAstro:unit]) {
+        if (![self astroJumpInDirection:scrubDirection]) {
+            [self endPress];    // the events have run out (a polar day or night)
+        }
+    } else {
         [self stepInDirection:scrubDirection];
     }
 }
