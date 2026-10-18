@@ -1174,10 +1174,10 @@ static void styleAsFrame(UIView *view) {
         [modeBlock addSubview:modeDial];
         [modeDial release];
 
-        // Over the equation-of-time dial: the pair.  Tap to step, hold to scrub, lift off the button to
-        // scrub hands-free.  UIControl keeps tracking a touch wherever it goes, so the release reaches the
-        // button however far the finger has wandered, classed inside or outside; the drag events say which
-        // side it is on meanwhile.
+        // Over the equation-of-time dial: the pair.  Tap to step, hold to scrub, lift outside the dial's
+        // circle to scrub hands-free.  UIControl keeps tracking a touch wherever it goes, so the release
+        // reaches the button however far the finger has wandered; the drags say meanwhile whether it is
+        // outside the circle (stepTouchDragged:withEvent:).
         stepBlock = [self addBlock];
         // Under the pair, the body ring for rise / set / transit
         bodyRing = [[EOTimeBodyRing alloc] initWithController:self];
@@ -1197,10 +1197,9 @@ static void styleAsFrame(UIView *view) {
         styleAsPlain(forwardButton);
         for (UIButton *button in [NSArray arrayWithObjects:backButton, forwardButton, nil]) {
             [button addTarget:self action:@selector(stepTouchDown:) forControlEvents:UIControlEventTouchDown];
-            [button addTarget:self action:@selector(stepTouchUp:) forControlEvents:(UIControlEventTouchUpInside | UIControlEventTouchCancel)];
-            [button addTarget:self action:@selector(stepTouchUpOutside:) forControlEvents:UIControlEventTouchUpOutside];
-            [button addTarget:self action:@selector(stepTouchDragExit:) forControlEvents:UIControlEventTouchDragExit];
-            [button addTarget:self action:@selector(stepTouchDragEnter:) forControlEvents:UIControlEventTouchDragEnter];
+            [button addTarget:self action:@selector(stepTouchUp:) forControlEvents:(UIControlEventTouchUpInside | UIControlEventTouchUpOutside)];
+            [button addTarget:self action:@selector(stepTouchCancel:) forControlEvents:UIControlEventTouchCancel];
+            [button addTarget:self action:@selector(stepTouchDragged:withEvent:) forControlEvents:(UIControlEventTouchDragInside | UIControlEventTouchDragOutside)];
         }
         // The padlock, the hands-free tell: over the pair at full alpha while a lift would lock, dimmer once
         // it has.  An image view takes no touches, so the pair keeps tracking beneath it.
@@ -1525,18 +1524,13 @@ static CGAffineTransform transformOnto(UIView *view, CGRect rect) {
     [self refresh];
 }
 
-// A lift on the button, or a cancelled touch (a system gesture, a rotation): the scrub ends
+// The lift.  Off the dial's circle (offButton): the latch, once the hold has engaged (the scrub runs on
+// hands-free until the next press); before that it was a sloppy tap, one step and no latch.  On it, the
+// scrub ends.
 - (void)stepTouchUp:(UIButton *)sender {
+    bool latch = offButton && [stepper isScrubbing];
     offButton = false;
-    [stepper endPress];
-    [self refresh];
-}
-
-// A lift off the button: the latch, once the hold has engaged (the scrub runs on hands-free until the
-// next press); before that it was a sloppy tap — one step, no latch
-- (void)stepTouchUpOutside:(UIButton *)sender {
-    offButton = false;
-    if ([stepper isScrubbing]) {
+    if (latch) {
         [stepper lockScrub];
     } else {
         [stepper endPress];
@@ -1544,15 +1538,25 @@ static CGAffineTransform transformOnto(UIView *view, CGRect rect) {
     [self refresh];
 }
 
-// The held finger leaves the button and comes back: the padlock shows what a lift would do
-- (void)stepTouchDragExit:(UIButton *)sender {
-    offButton = true;
+// A cancelled touch (a system gesture, a rotation): the scrub ends
+- (void)stepTouchCancel:(UIButton *)sender {
+    offButton = false;
+    [stepper endPress];
     [self refresh];
 }
 
-- (void)stepTouchDragEnter:(UIButton *)sender {
-    offButton = false;
-    [self refresh];
+// The held finger leaves the dial's circle (the body dial's rim, whether that shows or not) and comes back:
+// the padlock shows what a lift would do.  The circle, not UIKit's margin around the button, which on the
+// block at the screen's edge lies partly off the screen.
+- (void)stepTouchDragged:(UIButton *)sender withEvent:(UIEvent *)event {
+    CGPoint p = [[[event touchesForView:sender] anyObject] locationInView:stepBlock];
+    CGSize size = stepBlock.bounds.size;
+    double radius = fmin(size.width, size.height) / 2 - blockPad - 1;     // as the body dial's rim
+    bool off = hypot(p.x - size.width / 2, p.y - size.height / 2) > radius;
+    if (off != offButton) {
+        offButton = off;
+        [self refresh];
+    }
 }
 
 // The web's .flash-fail: the pressed button turns brown for a moment
