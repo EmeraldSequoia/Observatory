@@ -26,11 +26,12 @@
 @class EOTimeModeDial;
 @class EOTimeBodyRing;
 
-// The odometer, in canvas units: one line of wheels, with EOOdometerButtonsWidth kept clear at its right
-// end for EOClock's Set / Done and, beside it, Now (closed) or the keyboard button (open)
-static const double EOOdometerWidth = 460;
+// The odometer, in canvas units: one line, the date's wheels, EOOdometerDoneWidth kept clear in the middle
+// for EOClock's Set / Done (which stays put, so that Set is under the finger as Done), the time's wheels, and
+// the keyboard button
+static const double EOOdometerWidth = 441;
 static const double EOOdometerHeight = 38;
-static const double EOOdometerButtonsWidth = 154;
+static const double EOOdometerDoneWidth = 69;
 
 @interface EOTimeControllerView : UIView <UIGestureRecognizerDelegate, UITextFieldDelegate> {
     EOTimeStepper  *stepper;        // EOClock's; not retained

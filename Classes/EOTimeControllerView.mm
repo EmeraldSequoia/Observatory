@@ -36,7 +36,7 @@ static const double vanishEnd = 0.95;           // ...and is gone by this one, b
 static const double buttonRadius = 8;
 static const double gap = 4;
 static const double wheelGap = 4;               // between the wheels of a group
-static const double groupGap = 14;              // between the date's wheels and the time's
+static const double doneGap = 8;                // between Set / Done and the wheels either side, and before the keyboard button
 static const double eraWidth = 40;
 static const double yearWidth = 52;
 static const double wheelWidth = 34;            // month, day, hour, minute, second
@@ -738,8 +738,8 @@ static void styleAsFrame(UIView *view) {
         [stepBlock addSubview:padlock];
         [padlock release];
 
-        // The odometer: the wheels, then the keyboard button and Set / Done (EOClock's).  A typed value
-        // applies when its wheel's edit ends; the era, at once.
+        // The odometer: the date's wheels, Set / Done (EOClock's), the time's wheels and the keyboard button.
+        // A typed value applies when its wheel's edit ends; the era, at once.
         odometer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, EOOdometerWidth, EOOdometerHeight)];
         styleAsFrame(odometer);
         odometer.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:odometer.bounds cornerRadius:frameRadius].CGPath;
@@ -891,20 +891,25 @@ static void styleAsFrame(UIView *view) {
     [forward setFaceFrame:CGRectOffset(forwardFace, -forward.frame.origin.x, -forward.frame.origin.y)];
 }
 
-// The wheels centred in the space left of the buttons; the keyboard button where Now goes while closed
+// CE YYYY MM DD to the left of Set / Done in the middle, HH MM SS and the keyboard button to its right
 - (void)layoutOdometer {
-    double wheelsWidth = EOOdometerWidth - EOOdometerButtonsWidth;
-    double total = eraWidth + yearWidth + 5 * wheelWidth + 5 * wheelGap + groupGap + 2;
-    double x = (wheelsWidth - total) / 2;
+    double middle = EOOdometerWidth / 2;
+    double dateWidth = eraWidth + 2 + yearWidth + 2 * wheelWidth + 3 * wheelGap;
+    double x = middle - EOOdometerDoneWidth / 2 - doneGap - dateWidth;
     double y = 4;
     double height = EOOdometerHeight - 8;
     eraButton.frame = CGRectMake(x, y, eraWidth, height);
     x += eraWidth + wheelGap + 2;
     yearField.frame = CGRectMake(x, y, yearWidth, height);
     x += yearWidth + wheelGap;
-    for (UITextField *field in [NSArray arrayWithObjects:monthField, dayField, hourField, minuteField, secondField, nil]) {
+    for (UITextField *field in [NSArray arrayWithObjects:monthField, dayField, nil]) {
         field.frame = CGRectMake(x, y, wheelWidth, height);
-        x += wheelWidth + (field == dayField ? groupGap : wheelGap);
+        x += wheelWidth + wheelGap;
+    }
+    x = middle + EOOdometerDoneWidth / 2 + doneGap;
+    for (UITextField *field in [NSArray arrayWithObjects:hourField, minuteField, secondField, nil]) {
+        field.frame = CGRectMake(x, y, wheelWidth, height);
+        x += wheelWidth + (field == secondField ? doneGap : wheelGap);
     }
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
@@ -912,7 +917,7 @@ static void styleAsFrame(UIView *view) {
         drumOf(field).frame = field.bounds;
     }
     [CATransaction commit];
-    keyboardButton.frame = CGRectMake(wheelsWidth + 4, y, 69, height);
+    keyboardButton.frame = CGRectMake(x, y, EOOdometerWidth - 4 - x, height);
 }
 
 - (NSArray *)openingViews {

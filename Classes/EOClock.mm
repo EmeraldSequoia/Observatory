@@ -468,8 +468,8 @@ BOOL timeChanged = false;
     }
 }
 
-// Set / Done and Now at the odometer's right end, where they stay whether it shows or not, so that Set
-// is still under the finger as Done
+// Set / Done in the middle of the odometer, where it stays whether the odometer shows or not, so that Set is
+// still under the finger as Done; Now to its left
 - (void)placeSetAndNowButtonsForOrientation:(UIInterfaceOrientation)orientation {
     [self reorientSubView:resetBut toOrientation:orientation offsetBy:CGPointMake(resetX, resetY)];
     [self reorientSubView:nowBut toOrientation:orientation offsetBy:CGPointMake(resetX - advButtonWidth - 24 - nowButtonGap, resetY)];
@@ -571,7 +571,7 @@ BOOL timeChanged = false;
     [self reorientSubView:timePanel.odometer toOrientation:orientation offsetBy:CGPointMake(odometerX, odometerY)];
 }
 
-// Above every widget but Set / Done and Now, which sit over the odometer's right end
+// Above every widget but Set / Done, which sits over the odometer's middle, and Now
 - (void)bringTimePanelToFront {
     [view bringSubviewToFront:timePanel];
     [view bringSubviewToFront:resetBut];
@@ -1668,8 +1668,8 @@ static double odometerY;
 	odometerX = 0;
 	odometerY = 348;			// above the main dial, between the Moon and the map
     }
-    // Set / Done at the odometer's right end, Now to its left (placeSetAndNowButtonsForOrientation:)
-    resetX = odometerX + EOOdometerWidth/2 - 4 - (advButtonWidth+24)/2;
+    // Set / Done in the odometer's middle, where Set always was, Now to its left (placeSetAndNowButtonsForOrientation:)
+    resetX = odometerX;
     resetY = odometerY;
     EVX = BMX + centerX;
     EVY = BMY + centerY;
@@ -2039,7 +2039,7 @@ static bool localeIsCyrillic() {
     //resetBut.titleLabel.font = [UIFont fontWithName:@"Arial" size:18];
 
     // Now, the live-clock icon, shown beside it while the time is not the present (updateNowButton)
-    nowBut = [self createButtonAtX:resetX+(advButtonWidth+24+nowButtonGap)/2 Y:resetY width:advButtonWidth+24 height:advButtonHeight highlight:true
+    nowBut = [self createButtonAtX:resetX-(advButtonWidth+24+nowButtonGap) Y:resetY width:advButtonWidth+24 height:advButtonHeight highlight:true
 			     text:nil color:nil];
     [nowBut setImage:[EOTimeControllerView nowIconOfSize:advButtonHeight - 4] forState:UIControlStateNormal];
     nowBut.tintColor = [UIColor whiteColor];
