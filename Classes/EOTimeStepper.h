@@ -25,8 +25,8 @@ class ESTimeLocAstroEnvironment;
 - (int)dialPlanetNumber;        // the planet on the altitude and azimuth dials (an ECPlanetNumber)
 @end
 
-// What one step moves the time by.  The order is the chip order: the calendar units, then the
-// astronomical events (each step is a search).  All of them scrub when held.
+// What one step moves the time by.  The order is the chip order: the calendar units, which
+// also scrub when held, then the astronomical events, which are tap-only (each tap is a search).
 typedef enum EOTimeStepUnit {
     EOTimeStepCentury = 0,
     EOTimeStepYear,
@@ -99,7 +99,7 @@ typedef enum EOTimeScrubState {
 - (void)rollUnit:(EOTimeStepUnit)aUnit inDirection:(int)direction;
 
 // The pair's touches.  A press steps at once — for an astro unit it searches and jumps, and
-// answers false when there is no such event here — and arms the hold (not after a failed search).
+// answers false when there is no such event here — and, for a calendar unit, arms the hold.
 // A release on the button ends the scrub (endPress); a release off it after the hold has engaged
 // makes the scrub hands-free (lockScrub): it runs on until endPress — the next press anywhere,
 // Escape, the background, a rotation, the panel closing.
@@ -109,7 +109,7 @@ typedef enum EOTimeScrubState {
 - (bool)isScrubbing;    // the hold has engaged (held, or hands-free)
 - (bool)isLocked;       // hands-free
 
-// From the clock's tick: one unit (or one event: a search; finding none ends the scrub) per tick while a scrub runs
+// From the clock's tick: one unit per tick while a scrub runs
 - (void)scrubTick;
 
 // The transport: ‖ freezes the clock where it is, ▶ runs it on from there at real speed, ◀ runs
