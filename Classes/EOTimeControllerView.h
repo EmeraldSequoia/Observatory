@@ -5,9 +5,9 @@
 //  The time controller: four blocks that cover the four small dials while Set mode is open (the
 //  clock's status over Now, the drive ◀ ‖ ▶, the mode dial, and the ◀ ▶ pair: tap to step, hold to
 //  scrub, lift off to run hands-free; ringed by the bodies for rise / set / transit), and the odometer
-//  along the top, which replaces
-//  the old strip: wheels for the displayed date and time, each rolled by a vertical drag, and a
-//  keyboard switch that, while on, turns them into fields to type into instead.  The blocks and the
+//  along the top, which replaces the old strip: thumbwheels for the displayed date and time, each
+//  rolled by a vertical drag, and a keyboard switch that, while on, turns them into fields to type
+//  into instead.  The blocks and the
 //  odometer show only while the controller is open, swelling out of Set / Done as it opens and
 //  settling back into it as it closes, as the location picker's map does.
 //
@@ -25,11 +25,12 @@
 @class EOClock;
 @class EOTimeModeDial;
 @class EOTimeBodyRing;
+@class EOThumbwheel;
 
 // The odometer, in canvas units: one line, the date's wheels, EOOdometerDoneWidth kept clear in the middle
 // for EOClock's Set / Done (which stays put, so that Set is under the finger as Done), the time's wheels, and
 // the keyboard button
-static const double EOOdometerWidth = 441;
+static const double EOOdometerWidth = 455;
 static const double EOOdometerHeight = 38;
 static const double EOOdometerDoneWidth = 69;
 
@@ -74,7 +75,8 @@ static const double EOOdometerDoneWidth = 69;
     bool           faded;           // the scrub fade is on
     bool           shownBCE;        // the era wheel as drawn
     double         rollCarry;       // a wheel drag's travel not yet turned into notches
-    UITextField    *rollingWheel;   // the wheel the drag started on (gestureRecognizerShouldBegin:)
+    NSMutableArray *thumbwheels;    // the wheels as drawn, year to second, each under its field
+    EOThumbwheel   *rollingWheel;   // the wheel the drag started on (gestureRecognizerShouldBegin:)
     CADisplayLink  *shrinkLink;     // while closing: fades each view out near the end of its shrink (shrinkStep)
     CGRect         shrinkTarget;    // the rect they shrink into
 }

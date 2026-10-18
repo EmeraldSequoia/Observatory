@@ -9,6 +9,8 @@
 #import "EOClock.h"
 #import "Utilities.h"
 #import <QuartzCore/QuartzCore.h>
+#include <algorithm>
+#include <vector>
 
 // Geometry, in canvas units.  The blocks cover the small dials (radius 60, the eclipse ring 63) with their
 // labels; landscape's are taller, each pair filling its side's column between the Moon or the map and the
@@ -36,11 +38,12 @@ static const double vanishEnd = 0.95;           // ...and is gone by this one, b
 static const double buttonRadius = 8;
 static const double gap = 4;
 static const double wheelGap = 4;               // between the wheels of a group
-static const double doneGap = 8;                // between Set / Done and the wheels either side, and before the keyboard button
+static const double doneGap = 6;                // between Set / Done and the wheels either side
+static const double keyboardGap = 8;            // before the keyboard button
 static const double eraWidth = 40;
-static const double yearWidth = 52;
-static const double wheelWidth = 34;            // month, day, hour, minute, second
-static const double notch = 20;                 // a wheel drag's travel per unit rolled
+static const double yearWidth = 47.5;           // the wheels' windows; each has its thumbwheel's rim beside it
+static const double wheelWidth = 31;            // month, day, hour, minute, second
+static const double notch = 20;                 // a wheel drag's travel per unit rolled, half of it to the next
 static const double scrubAlpha = 0.38;          // the blocks while a scrub runs (the web's tuned level)
 static const NSTimeInterval fadeDuration = 0.15;
 static const NSTimeInterval flashDuration = 0.3;    // a pair button after a search that found nothing
@@ -171,24 +174,9 @@ static void styleAsEra(UIButton *button, bool bce) {     // the web's #tp-bce, a
     }
 }
 
-// A wheel's drum shading: the sublayer of its field named for it (found by name: the field adds sublayers of
-// its own, ahead of it, as it lays out and edits)
-static NSString * const drumLayerName = @"EODrum";
-
-static CALayer *drumOf(UITextField *field) {
-    for (CALayer *layer in field.layer.sublayers) {
-        if ([layer.name isEqualToString:drumLayerName]) {
-            return layer;
-        }
-    }
-    return nil;
-}
-
-// A wheel's looks.  Rolling: a thumbwheel's drum, a cylinder shaded dark toward its top and bottom edges and
-// lit across the middle, under the digits; while a drag rolls it, a bold gold rim.  Typing, while the keyboard
-// switch is on: a plain white field.
-static void styleWheel(UITextField *field, bool typing, bool dragging) {
-    drumOf(field).hidden = typing;
+// A wheel's field.  Rolling, it is invisible: its thumbwheel beneath it shows the value.  Typing, while the
+// keyboard switch is on: a plain white field over the thumbwheel's window.
+static void styleWheel(UITextField *field, bool typing) {
     if (typing) {
         field.backgroundColor = [UIColor whiteColor];
         field.textColor = rgb(0x11, 0x11, 0x22);
@@ -196,11 +184,9 @@ static void styleWheel(UITextField *field, bool typing, bool dragging) {
         field.layer.borderColor = rgb(0x88, 0xaa, 0xff).CGColor;
         field.layer.cornerRadius = 4;
     } else {
-        field.backgroundColor = rgb(0x5a, 0x5a, 0x6a);
-        field.textColor = [UIColor whiteColor];
-        field.layer.borderWidth = dragging ? 2.5 : 1;
-        field.layer.borderColor = dragging ? [UIColor colorWithRed:1 green:0xc1/256.0 blue:0x25/256.0 alpha:1].CGColor : rgb(0x22, 0x22, 0x2a).CGColor;
-        field.layer.cornerRadius = 3;
+        field.backgroundColor = [UIColor clearColor];
+        field.textColor = [UIColor clearColor];
+        field.layer.borderWidth = 0;
     }
 }
 
@@ -561,6 +547,497 @@ static NSString *symbolForBody(int planet) {
 
 @end
 
+//// A thumbwheel: an odometer wheel drawn as the thumbwheel switch it stands for.  The digits are on a drum
+//// behind a window in the panel, flat like the rest of the controller; beside them the wheel's toothed rim
+//// stands out of a slot, drawn in cabinet projection (depth recedes up and to the right at thumbAngle, at
+//// half scale) so that it has the substance that says it turns.  The drum and the rim turn together: with a
+//// drag (rolled by the controller, settling on the nearest value), with each change of the value by a step,
+//// and in a nudge as the controller opens.  The look was tuned on a web prototype ("steel slim").
+
+static const double thumbAngle = 35 * M_PI / 180;  // the oblique angle depth recedes at
+static const double thumbDepthScale = 0.5;         // depth's scale: cabinet projection
+static const double thumbRadius = 22;              // the rim, at its teeth's tips
+static const double thumbProtrusion = 3;           // the teeth stand out of the panel by this
+static const double thumbToothDepth = 2;
+static const int    thumbTeethPerStep = 2;
+static const double thumbPanelThickness = 1.5;     // the walls of the window and the slot
+static const double thumbRimWidth = 5;             // beside the window, after a gap of thumbRimGap
+static const double thumbRimGap = 1;
+static const double thumbShine = 0.7;
+static const double thumbLightFrom = 30 * M_PI / 180;      // from above, this far toward the right
+static const double thumbLightHeight = 40 * M_PI / 180;    // above the panel
+static const NSTimeInterval thumbRollDuration = 0.26;      // a change of value by a step
+static const NSTimeInterval thumbSettleDuration = 0.18;    // after a drag
+static const NSTimeInterval thumbNudgeOut = 0.18;          // the opening nudge: a third of a step on, and back
+static const NSTimeInterval thumbNudgeBack = 0.34;
+static const double thumbNudgeTurn = 0.32;
+
+typedef struct { double x, y, z; } EOVec;       // x right, y down, z toward the viewer; the panel's face is z = 0
+
+static EOVec vec(double x, double y, double z) {
+    EOVec v = { x, y, z };
+    return v;
+}
+
+static double dot(EOVec a, EOVec b) {
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+static EOVec normalized(EOVec a) {
+    double l = sqrt(dot(a, a));
+    return l > 0 ? vec(a.x / l, a.y / l, a.z / l) : a;
+}
+
+static CGPoint project(EOVec p) {
+    return CGPointMake(p.x - p.z * thumbDepthScale * cos(thumbAngle), p.y + p.z * thumbDepthScale * sin(thumbAngle));
+}
+
+static EOVec towardViewer() {       // along the projection
+    return normalized(vec(thumbDepthScale * cos(thumbAngle), -thumbDepthScale * sin(thumbAngle), 1));
+}
+
+typedef struct {
+    double base[3];
+    double shininess;
+    double ambient;
+} EOFinish;
+
+static const EOFinish steelFinish = { { 0.5, 0.53, 0.57 }, 30, 0.3 };
+static const EOFinish panelFinish = { { 0.16, 0.16, 0.19 }, 16, 0.35 };
+
+// A surface facing n, lit from the upper right with a white highlight
+static CGColorRef createShade(EOVec n, const EOFinish &finish, double shine) {
+    EOVec light = normalized(vec(cos(thumbLightHeight) * sin(thumbLightFrom), -cos(thumbLightHeight) * cos(thumbLightFrom), sin(thumbLightHeight)));
+    EOVec v = towardViewer();
+    EOVec half = normalized(vec(light.x + v.x, light.y + v.y, light.z + v.z));
+    double diffuse = fmax(0, dot(n, light));
+    double highlight = pow(fmax(0, dot(n, half)), finish.shininess) * thumbShine * shine;
+    CGFloat c[4];
+    for (int i = 0; i < 3; i++) {
+        c[i] = fmin(1, finish.base[i] * (finish.ambient + (1 - finish.ambient) * 1.4 * diffuse) + highlight);
+    }
+    c[3] = 1;
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+    CGColorRef color = CGColorCreate(space, c);
+    CGColorSpaceRelease(space);
+    return color;
+}
+
+// The part of a polygon in front of the panel (sign 1) or behind it (sign -1)
+static std::vector<EOVec> clipAtPanel(const std::vector<EOVec> &poly, int sign) {
+    std::vector<EOVec> out;
+    for (size_t i = 0; i < poly.size(); i++) {
+        EOVec a = poly[i], b = poly[(i + 1) % poly.size()];
+        double da = sign * a.z, db = sign * b.z;
+        if (da >= 0) {
+            out.push_back(a);
+        }
+        if ((da >= 0) != (db >= 0)) {
+            double t = da / (da - db);
+            out.push_back(vec(a.x + t * (b.x - a.x), a.y + t * (b.y - a.y), 0));
+        }
+    }
+    return out;
+}
+
+static void fillFacet(CGContextRef context, const std::vector<EOVec> &poly, CGColorRef color) {
+    if (poly.size() < 3) {
+        return;
+    }
+    for (size_t i = 0; i < poly.size(); i++) {
+        CGPoint p = project(poly[i]);
+        if (i == 0) {
+            CGContextMoveToPoint(context, p.x, p.y);
+        } else {
+            CGContextAddLineToPoint(context, p.x, p.y);
+        }
+    }
+    CGContextClosePath(context);
+    CGContextSetFillColorWithColor(context, color);
+    CGContextSetStrokeColorWithColor(context, color);
+    CGContextSetLineWidth(context, 0.15);       // over the seams between facets
+    CGContextDrawPath(context, kCGPathFillStroke);
+}
+
+// The walls of a hole in the panel: with depth receding up and to the right, its left and bottom walls show
+static void drawHoleWalls(CGContextRef context, CGRect hole) {
+    double x = hole.origin.x, y = hole.origin.y, w = hole.size.width, h = hole.size.height, t = thumbPanelThickness;
+    CGColorRef left = createShade(vec(1, 0, 0), panelFinish, 0.3);
+    CGColorRef bottom = createShade(vec(0, -1, 0), panelFinish, 0.3);
+    std::vector<EOVec> leftWall = { vec(x, y, 0), vec(x, y + h, 0), vec(x, y + h, -t), vec(x, y, -t) };
+    std::vector<EOVec> bottomWall = { vec(x, y + h, 0), vec(x + w, y + h, 0), vec(x + w, y + h, -t), vec(x, y + h, -t) };
+    fillFacet(context, leftWall, left);
+    fillFacet(context, bottomWall, bottom);
+    CGColorRelease(left);
+    CGColorRelease(bottom);
+}
+
+@interface EOThumbwheel : UIView {
+    UITextField   *field;       // the wheel's field, over the window, for typing (not retained: the odometer's)
+    CGRect        window;       // the digits' window, in our coordinates
+    CGRect        rim;          // the rim's slot, beside it
+    NSString      *labels[5];   // the value two steps back to two steps on; nil where there is none
+    double        roll;         // how far the wheel stands turned from its value, in steps: + toward the next
+    long          steps;        // the steps it has turned, which set its teeth
+    bool          dragging;
+    bool          typing;
+    CADisplayLink *link;        // while a roll animates
+    CFTimeInterval animationStart;
+    int           keyCount;     // the animation's keyframes: times from its start, and rolls
+    double        keyTimes[4];
+    double        keyRolls[4];
+}
+@property (readonly) UITextField *field;
+- (id)initWithField:(UITextField *)aField;
+- (void)setWindow:(CGRect)aWindow;
+- (void)showLabels:(NSString **)newLabels;      // five: see labels
+- (void)setDragging:(bool)isDragging;
+- (void)setRoll:(double)aRoll;                  // while dragging
+- (void)setTyping:(bool)isTyping;
+- (void)nudgeAfter:(NSTimeInterval)delay;
+- (NSString *)currentLabel;
+@end
+
+@implementation EOThumbwheel
+
+@synthesize field;
+
+- (id)initWithField:(UITextField *)aField {
+    if ((self = [super initWithFrame:CGRectZero])) {
+        field = aField;
+        self.opaque = NO;
+        self.backgroundColor = [UIColor clearColor];
+        self.clipsToBounds = NO;        // the teeth stand out a little down and to the left
+        self.userInteractionEnabled = NO;   // the odometer's drag rolls it
+        self.contentMode = UIViewContentModeRedraw;
+    }
+    return self;
+}
+
+- (void)dealloc {
+    for (int i = 0; i < 5; i++) {
+        [labels[i] release];
+    }
+    [super dealloc];
+}
+
+// The window; the rim beside it, its full height
+- (void)setWindow:(CGRect)aWindow {
+    window = aWindow;
+    rim = CGRectMake(CGRectGetMaxX(window) + thumbRimGap, 0, thumbRimWidth, self.bounds.size.height);
+    [self setNeedsDisplay];
+}
+
+- (NSString *)currentLabel {
+    return labels[2];
+}
+
+- (void)stopAnimation {
+    [link invalidate];      // it retains us until then
+    link = nil;
+}
+
+- (void)willMoveToWindow:(UIWindow *)newWindow {
+    if (!newWindow) {
+        [self stopAnimation];
+    }
+}
+
+- (void)animateWithCount:(int)count times:(const double *)times rolls:(const double *)rolls {
+    if (UIAccessibilityIsReduceMotionEnabled() || !self.window) {
+        roll = rolls[count - 1];
+        [self stopAnimation];
+        [self setNeedsDisplay];
+        return;
+    }
+    keyCount = count;
+    for (int i = 0; i < count; i++) {
+        keyTimes[i] = times[i];
+        keyRolls[i] = rolls[i];
+    }
+    roll = rolls[0];
+    animationStart = CACurrentMediaTime();
+    if (!link) {
+        link = [CADisplayLink displayLinkWithTarget:self selector:@selector(animationStep:)];
+        [link addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+    }
+    [self setNeedsDisplay];
+}
+
+- (void)animationStep:(CADisplayLink *)aLink {
+    double t = CACurrentMediaTime() - animationStart;
+    if (t >= keyTimes[keyCount - 1]) {
+        roll = keyRolls[keyCount - 1];
+        [self stopAnimation];
+    } else {
+        int i = 0;
+        while (i + 1 < keyCount && keyTimes[i + 1] <= t) {
+            i++;
+        }
+        double span = keyTimes[i + 1] - keyTimes[i];
+        double u = span > 0 ? fmax(0, (t - keyTimes[i]) / span) : 1;
+        roll = keyRolls[i] + (keyRolls[i + 1] - keyRolls[i]) * u * u * (3 - 2 * u);     // smoothstep
+    }
+    [self setNeedsDisplay];
+}
+
+// A new value.  A step on or back rolls into place, unless a drag has the wheel (it sets the roll itself);
+// anything further is a jump.
+- (void)showLabels:(NSString **)newLabels {
+    bool same = true;
+    for (int i = 0; i < 5; i++) {
+        same = same && (labels[i] == newLabels[i] || [labels[i] isEqualToString:newLabels[i]]);
+    }
+    if (same) {
+        return;
+    }
+    bool changed = !labels[2] || ![labels[2] isEqualToString:newLabels[2]];
+    int direction = 0;
+    if (labels[2] && changed) {
+        if ([labels[3] isEqualToString:newLabels[2]]) {
+            direction = 1;
+        } else if ([labels[1] isEqualToString:newLabels[2]]) {
+            direction = -1;
+        }
+    }
+    for (int i = 0; i < 5; i++) {
+        [labels[i] release];
+        labels[i] = [newLabels[i] retain];
+    }
+    steps += direction;
+    if (!dragging) {
+        if (direction != 0 && !typing) {
+            double times[2] = { 0, thumbRollDuration };
+            double rolls[2] = { (double)-direction, 0 };
+            [self animateWithCount:2 times:times rolls:rolls];
+        } else if (changed) {
+            [self stopAnimation];
+            roll = 0;
+        }
+    }
+    [self setNeedsDisplay];
+}
+
+- (void)setDragging:(bool)isDragging {
+    dragging = isDragging;
+    if (dragging) {
+        [self stopAnimation];
+    } else {
+        double times[2] = { 0, thumbSettleDuration };
+        double rolls[2] = { roll, 0 };
+        [self animateWithCount:2 times:times rolls:rolls];
+    }
+}
+
+- (void)setRoll:(double)aRoll {
+    roll = aRoll;
+    [self setNeedsDisplay];
+}
+
+- (void)setTyping:(bool)isTyping {
+    typing = isTyping;
+    if (typing) {
+        [self stopAnimation];
+        roll = 0;
+    }
+    [self setNeedsDisplay];
+}
+
+- (void)nudgeAfter:(NSTimeInterval)delay {
+    if (dragging || typing) {
+        return;
+    }
+    double times[4] = { 0, delay, delay + thumbNudgeOut, delay + thumbNudgeOut + thumbNudgeBack };
+    double rolls[4] = { 0, 0, thumbNudgeTurn, 0 };
+    [self animateWithCount:4 times:times rolls:rolls];
+}
+
+//// Drawing
+
+- (double)axisDepth {               // the wheel's axis, behind the panel
+    return thumbRadius - thumbProtrusion;
+}
+
+- (double)drumRadius {              // the digits' drum, just behind the window
+    return fmax([self axisDepth] - 1.2, 6);
+}
+
+- (double)stepAngle {               // the turn from one value to the next: the digits' pitch on the drum
+    return field.font.pointSize * 1.15 / [self drumRadius];
+}
+
+- (void)drawRect:(CGRect)rect {
+    CGContextRef context = UIGraphicsGetCurrentContext();
+    if (!typing) {
+        [self drawWindowIn:context];
+    }
+    [self drawRimIn:context];
+}
+
+// The drum through the window: the value, its neighbours curving away above and below as it turns, the
+// thumbwheel's shading (dark toward the drum's top and bottom, lit across its middle), and the window's walls
+- (void)drawWindowIn:(CGContextRef)context {
+    double yc = CGRectGetMidY(window);
+    double d = [self axisDepth], r = [self drumRadius], step = [self stepAngle];
+    CGContextSaveGState(context);
+    UIBezierPath *frame = [UIBezierPath bezierPathWithRoundedRect:window cornerRadius:3];
+    [frame addClip];
+    CGContextSetFillColorWithColor(context, rgb(0x5a, 0x5a, 0x6a).CGColor);
+    CGContextFillRect(context, window);
+    NSDictionary *attributes = [NSDictionary dictionaryWithObjectsAndKeys:field.font, NSFontAttributeName,
+                                             [UIColor whiteColor], NSForegroundColorAttributeName, nil];
+    for (int k = -2; k <= 2; k++) {
+        double phi = (k - roll) * step;
+        if (fabs(phi) >= M_PI / 2 || !labels[k + 2]) {
+            continue;
+        }
+        CGPoint p = project(vec(CGRectGetMidX(window), yc + r * sin(phi), -d + r * cos(phi)));
+        CGSize extent = [labels[k + 2] sizeWithAttributes:attributes];
+        CGContextSaveGState(context);
+        CGContextTranslateCTM(context, p.x, p.y);
+        CGContextScaleCTM(context, 1, cos(phi));
+        [labels[k + 2] drawAtPoint:CGPointMake(-extent.width / 2, -extent.height / 2) withAttributes:attributes];
+        CGContextRestoreGState(context);
+    }
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+    CGFloat components[] = { 0, 0, 0, 0.92,  0, 0, 0, 0.35,  1, 1, 1, 0.12,  0, 0, 0, 0.35,  0, 0, 0, 0.92 };
+    CGFloat locations[] = { 0, 0.28, 0.5, 0.72, 1 };
+    CGGradientRef shading = CGGradientCreateWithColorComponents(space, components, locations, 5);
+    CGContextDrawLinearGradient(context, shading, CGPointMake(0, window.origin.y), CGPointMake(0, CGRectGetMaxY(window)), 0);
+    CGGradientRelease(shading);
+    CGColorSpaceRelease(space);
+    drawHoleWalls(context, window);
+    CGContextRestoreGState(context);
+    CGContextSetStrokeColorWithColor(context, rgb(0x22, 0x22, 0x2a).CGColor);
+    CGContextSetLineWidth(context, 1);
+    CGContextAddPath(context, frame.CGPath);
+    CGContextStrokePath(context);
+}
+
+// The rim: its teeth's faces, in the profile's plane extruded across the rim's width, each shaded by where it
+// faces; and its side, which faces the way depth recedes and so is in front of all of them.  What is behind
+// the panel shows only through the slot.
+- (void)drawRimIn:(CGContextRef)context {
+    double yc = CGRectGetMidY(window);
+    double d = [self axisDepth], step = [self stepAngle];
+    double tip = thumbRadius, root = thumbRadius - thumbToothDepth;
+    double pitch = step / thumbTeethPerStep;
+    double tipHalf = pitch * 0.2, rootHalf = pitch * 0.34;
+    double turned = (steps + roll) * step;
+    double reach = M_PI / 2 + pitch;
+    double x0 = rim.origin.x + 0.3, x1 = CGRectGetMaxX(rim) - 0.3;
+
+    // The profile across the front of the wheel, top to bottom: (y, z) at each corner of each tooth
+    std::vector<CGPoint> profile;
+    for (long i = (long)ceil((turned - reach) / pitch); i <= (long)floor((turned + reach) / pitch); i++) {
+        double a = i * pitch - turned;
+        double corners[4][2] = { { a - rootHalf, root }, { a - tipHalf, tip }, { a + tipHalf, tip }, { a + rootHalf, root } };
+        for (int c = 0; c < 4; c++) {
+            profile.push_back(CGPointMake(yc + corners[c][1] * sin(corners[c][0]), -d + corners[c][1] * cos(corners[c][0])));
+        }
+    }
+    struct Facet {
+        std::vector<EOVec> poly;
+        CGColorRef color;
+        double depth;
+    };
+    std::vector<Facet> facets;
+    EOVec v = towardViewer();
+    for (size_t j = 0; j + 1 < profile.size(); j++) {
+        CGPoint p = profile[j], q = profile[j + 1];
+        EOVec n = normalized(vec(0, -(q.y - p.y), q.x - p.x));
+        if (dot(n, v) <= 0) {
+            continue;       // facing away
+        }
+        Facet facet;
+        facet.poly = { vec(x0, p.x, p.y), vec(x1, p.x, p.y), vec(x1, q.x, q.y), vec(x0, q.x, q.y) };
+        facet.color = createShade(n, steelFinish, 1);
+        facet.depth = v.y * (p.x + q.x) / 2 + v.z * (p.y + q.y) / 2;
+        facets.push_back(facet);
+    }
+    std::sort(facets.begin(), facets.end(), [](const Facet &a, const Facet &b) { return a.depth < b.depth; });
+    std::vector<EOVec> side;
+    for (CGPoint p : profile) {
+        side.push_back(vec(x1, p.x, p.y));
+    }
+    side.push_back(vec(x1, yc, -d));
+    CGColorRef sideColor = createShade(vec(1, 0, 0), steelFinish, 0.8);
+
+    // The slot, as long as the teeth that stand out of it
+    double half = fmin(17, fmax(sqrt(fmax(0, tip * tip - d * d)) + 1, 4));
+    CGRect slot = CGRectMake(rim.origin.x, yc - half, rim.size.width, 2 * half);
+    CGContextSaveGState(context);
+    CGContextClipToRect(context, slot);
+    CGContextSetRGBFillColor(context, 0.02, 0.02, 0.025, 1);
+    CGContextFillRect(context, slot);
+    for (const Facet &facet : facets) {
+        fillFacet(context, clipAtPanel(facet.poly, -1), facet.color);
+    }
+    fillFacet(context, clipAtPanel(side, -1), sideColor);
+    drawHoleWalls(context, slot);
+    CGContextRestoreGState(context);
+    for (const Facet &facet : facets) {
+        fillFacet(context, clipAtPanel(facet.poly, 1), facet.color);
+        CGColorRelease(facet.color);
+    }
+    fillFacet(context, clipAtPanel(side, 1), sideColor);
+    CGColorRelease(sideColor);
+}
+
+@end
+
+// The values a wheel shows around the time's: two steps back to two on, as rolling would make them (a day
+// wraps at its month's end; the year has no neighbours past the supported range's ends, and counts down
+// before the Common Era)
+static int daysInMonth(int era, int year, int month) {
+    static const int days[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+    if (month != 2) {
+        return days[(month - 1 + 12) % 12];
+    }
+    bool leap;
+    if (era == 0) {
+        leap = (year - 1) % 4 == 0;     // proleptic Julian: 1 BCE, 5 BCE, ...
+    } else if (year < 1582) {
+        leap = year % 4 == 0;
+    } else {
+        leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    }
+    return leap ? 29 : 28;
+}
+
+static void wheelLabels(EOTimeStepUnit unit, const ESDateComponents &cs, NSString **labels) {
+    for (int k = -2; k <= 2; k++) {
+        NSString *label = nil;
+        switch (unit) {
+          case EOTimeStepYear: {
+            int year = cs.era == 0 ? cs.year - k : cs.year + k;
+            if (year >= 1 && !(cs.era == 0 && year > 4000) && !(cs.era != 0 && year > 2800)) {
+                label = [NSString stringWithFormat:@"%d", year];
+            }
+            break;
+          }
+          case EOTimeStepMonth:
+            label = [NSString stringWithFormat:@"%02d", (cs.month - 1 + k + 24) % 12 + 1];
+            break;
+          case EOTimeStepDay: {
+            int n = daysInMonth(cs.era, cs.year, cs.month);
+            label = [NSString stringWithFormat:@"%02d", (cs.day - 1 + k + 2 * n) % n + 1];
+            break;
+          }
+          case EOTimeStepHour:
+            label = [NSString stringWithFormat:@"%02d", (cs.hour + k + 48) % 24];
+            break;
+          case EOTimeStepMinute:
+            label = [NSString stringWithFormat:@"%02d", (cs.minute + k + 120) % 60];
+            break;
+          default:
+            label = [NSString stringWithFormat:@"%02d", ((int)floor(cs.seconds) + k + 120) % 60];
+            break;
+        }
+        labels[k + 2] = label;
+    }
+}
+
 @implementation EOTimeControllerView
 
 @synthesize nowBlock, driveBlock, modeBlock, stepBlock, odometer;
@@ -611,23 +1088,15 @@ static void styleAsFrame(UIView *view) {
     return label;
 }
 
-// An odometer wheel: a vertical drag on it rolls its unit (the odometer's, wheelPanned:); it takes digits
-// from the keyboard only while the keyboard switch is on (keyboardTapped:)
+// An odometer wheel: a thumbwheel, which a vertical drag on it rolls (the odometer's, wheelPanned:), and over
+// its window a field, which takes digits from the keyboard only while the keyboard switch is on (keyboardTapped:)
 - (UITextField *)addWheelWithPlaceholder:(NSString *)placeholder unit:(EOTimeStepUnit)unit {
     UITextField *field = [[UITextField alloc] initWithFrame:CGRectZero];
     field.font = [UIFont monospacedDigitSystemFontOfSize:18 weight:UIFontWeightMedium];
     field.tintColor = rgb(0x33, 0x55, 0xcc);
     field.textAlignment = NSTextAlignmentCenter;
     field.clipsToBounds = YES;
-    CAGradientLayer *drum = [CAGradientLayer layer];
-    drum.name = drumLayerName;
-    drum.colors = [NSArray arrayWithObjects:(id)[UIColor colorWithWhite:0 alpha:0.92].CGColor, (id)[UIColor colorWithWhite:0 alpha:0.35].CGColor,
-                                            (id)[UIColor colorWithWhite:1 alpha:0.12].CGColor,
-                                            (id)[UIColor colorWithWhite:0 alpha:0.35].CGColor, (id)[UIColor colorWithWhite:0 alpha:0.92].CGColor, nil];
-    drum.locations = [NSArray arrayWithObjects:[NSNumber numberWithDouble:0], [NSNumber numberWithDouble:0.28], [NSNumber numberWithDouble:0.5],
-                                               [NSNumber numberWithDouble:0.72], [NSNumber numberWithDouble:1], nil];
-    [field.layer insertSublayer:drum atIndex:0];
-    styleWheel(field, false, false);
+    styleWheel(field, false);
     field.placeholder = placeholder;
     field.keyboardType = UIKeyboardTypeNumberPad;
     field.keyboardAppearance = UIKeyboardAppearanceDark;
@@ -646,6 +1115,10 @@ static void styleAsFrame(UIView *view) {
     field.delegate = self;
     field.tag = unit;
     field.userInteractionEnabled = NO;      // a field only while the keyboard switch is on (setEntering:)
+    EOThumbwheel *wheel = [[EOThumbwheel alloc] initWithField:field];
+    [odometer addSubview:wheel];
+    [thumbwheels addObject:wheel];
+    [wheel release];
     [odometer addSubview:field];
     [field release];
     return field;
@@ -668,6 +1141,7 @@ static void styleAsFrame(UIView *view) {
         shownBCE = false;
         rollCarry = 0;
         entering = false;
+        thumbwheels = [[NSMutableArray alloc] init];
 
         self.opaque = NO;
         self.backgroundColor = [UIColor clearColor];
@@ -786,6 +1260,7 @@ static void styleAsFrame(UIView *view) {
 
 - (void)dealloc {
     [NSObject cancelPreviousPerformRequestsWithTarget:self];
+    [thumbwheels release];
     // The widgets are the view hierarchy's; the stepper and the clock are not ours
     [super dealloc];
 }
@@ -891,32 +1366,28 @@ static void styleAsFrame(UIView *view) {
     [forward setFaceFrame:CGRectOffset(forwardFace, -forward.frame.origin.x, -forward.frame.origin.y)];
 }
 
-// CE YYYY MM DD to the left of Set / Done in the middle, HH MM SS and the keyboard button to its right
+// CE YYYY MM DD to the left of Set / Done in the middle, HH MM SS and the keyboard button to its right; each
+// wheel's rim beside its window
 - (void)layoutOdometer {
     double middle = EOOdometerWidth / 2;
-    double dateWidth = eraWidth + 2 + yearWidth + 2 * wheelWidth + 3 * wheelGap;
+    double rimRoom = thumbRimGap + thumbRimWidth;
+    double dateWidth = eraWidth + 2 + yearWidth + 2 * wheelWidth + 3 * rimRoom + 3 * wheelGap;
     double x = middle - EOOdometerDoneWidth / 2 - doneGap - dateWidth;
     double y = 4;
     double height = EOOdometerHeight - 8;
     eraButton.frame = CGRectMake(x, y, eraWidth, height);
     x += eraWidth + wheelGap + 2;
-    yearField.frame = CGRectMake(x, y, yearWidth, height);
-    x += yearWidth + wheelGap;
-    for (UITextField *field in [NSArray arrayWithObjects:monthField, dayField, nil]) {
-        field.frame = CGRectMake(x, y, wheelWidth, height);
-        x += wheelWidth + wheelGap;
+    for (EOThumbwheel *wheel in thumbwheels) {
+        UITextField *field = wheel.field;
+        double width = (field == yearField) ? yearWidth : wheelWidth;
+        if (field == hourField) {
+            x = middle + EOOdometerDoneWidth / 2 + doneGap;
+        }
+        wheel.frame = CGRectMake(x, 0, width + rimRoom, EOOdometerHeight);
+        [wheel setWindow:CGRectMake(0, y, width, height)];
+        field.frame = CGRectMake(x, y, width, height);
+        x += width + rimRoom + (field == secondField ? keyboardGap : wheelGap);
     }
-    x = middle + EOOdometerDoneWidth / 2 + doneGap;
-    for (UITextField *field in [NSArray arrayWithObjects:hourField, minuteField, secondField, nil]) {
-        field.frame = CGRectMake(x, y, wheelWidth, height);
-        x += wheelWidth + (field == secondField ? doneGap : wheelGap);
-    }
-    [CATransaction begin];
-    [CATransaction setDisableActions:YES];
-    for (UITextField *field in [NSArray arrayWithObjects:yearField, monthField, dayField, hourField, minuteField, secondField, nil]) {
-        drumOf(field).frame = field.bounds;
-    }
-    [CATransaction commit];
     keyboardButton.frame = CGRectMake(x, y, EOOdometerWidth - 4 - x, height);
 }
 
@@ -975,6 +1446,11 @@ static CGAffineTransform transformOnto(UIView *view, CGRect rect) {
                 view.transform = CGAffineTransformIdentity;
             }
         } completion:NULL];
+        // As the odometer arrives, its wheels turn a little and back, one after another: they roll
+        int i = 0;
+        for (EOThumbwheel *wheel in thumbwheels) {
+            [wheel nudgeAfter:growDuration * 0.5 + 0.07 * i++];
+        }
         return;
     }
     // Closing: nothing on the way back takes a touch, and once it is all in Set / Done, it goes (unless it has
@@ -1117,35 +1593,40 @@ static CGAffineTransform transformOnto(UIView *view, CGRect rect) {
     CGPoint translation = [pan translationInView:odometer];
     CGPoint start = CGPointMake(location.x - translation.x, location.y - translation.y);
     rollingWheel = nil;
-    for (UITextField *field in [NSArray arrayWithObjects:yearField, monthField, dayField, hourField, minuteField, secondField, nil]) {
-        if (CGRectContainsPoint(field.frame, start)) {
-            rollingWheel = field;
+    for (EOThumbwheel *wheel in thumbwheels) {
+        if (CGRectContainsPoint(wheel.frame, start)) {
+            rollingWheel = wheel;
         }
     }
     return rollingWheel != nil;
 }
 
-// Up rolls the wheel on, down rolls it back, a unit per notch of travel; the wheel wears a gold rim while it rolls
+// Up rolls the wheel on, down rolls it back: half a notch of travel rolls to the next unit, and the wheel turns
+// with the finger meanwhile, settling on its value when the drag ends.  At the range's end it goes no further.
 - (void)wheelPanned:(UIPanGestureRecognizer *)recognizer {
-    UITextField *wheel = rollingWheel;
+    EOThumbwheel *wheel = rollingWheel;
     if (recognizer.state == UIGestureRecognizerStateBegan) {
         rollCarry = 0;
-        styleWheel(wheel, false, true);
+        [wheel setDragging:true];
     } else if (recognizer.state != UIGestureRecognizerStateChanged) {
-        styleWheel(wheel, entering, false);     // ended, cancelled or failed
+        [wheel setDragging:false];      // ended, cancelled or failed
         return;
     }
     rollCarry -= [recognizer translationInView:odometer].y;
     [recognizer setTranslation:CGPointZero inView:odometer];
-    EOTimeStepUnit unit = (EOTimeStepUnit)wheel.tag;
-    while (rollCarry >= notch) {
-        [stepper rollUnit:unit inDirection:1];
-        rollCarry -= notch;
+    EOTimeStepUnit unit = (EOTimeStepUnit)wheel.field.tag;
+    while (fabs(rollCarry) >= notch / 2) {
+        int direction = rollCarry > 0 ? 1 : -1;
+        NSString *before = [[[wheel currentLabel] retain] autorelease];
+        [stepper rollUnit:unit inDirection:direction];
+        [self refresh];
+        if ([[wheel currentLabel] isEqualToString:before]) {
+            rollCarry = 0;      // at the limit
+            break;
+        }
+        rollCarry -= direction * notch;
     }
-    while (rollCarry <= -notch) {
-        [stepper rollUnit:unit inDirection:-1];
-        rollCarry += notch;
-    }
+    [wheel setRoll:rollCarry / notch];
     [self refresh];
 }
 
@@ -1161,8 +1642,11 @@ static CGAffineTransform transformOnto(UIView *view, CGRect rect) {
     }
     entering = on;
     for (UITextField *field in [NSArray arrayWithObjects:yearField, monthField, dayField, hourField, minuteField, secondField, nil]) {
-        styleWheel(field, on, false);
+        styleWheel(field, on);
         field.userInteractionEnabled = on;
+    }
+    for (EOThumbwheel *wheel in thumbwheels) {
+        [wheel setTyping:on];
     }
     if (on) {
         styleAsActive(keyboardButton);
@@ -1275,7 +1759,12 @@ static CGAffineTransform transformOnto(UIView *view, CGRect rect) {
         [self showEra:(cs.era == 0)];
     }
     if (!open) {
-        return;     // the rest is the blocks'
+        return;     // the rest is the blocks' and the thumbwheels'
+    }
+    for (EOThumbwheel *wheel in thumbwheels) {
+        NSString *labels[5];
+        wheelLabels((EOTimeStepUnit)wheel.field.tag, cs, labels);
+        [wheel showLabels:labels];
     }
 
     EOTimeStepUnit unit = stepper.unit;
