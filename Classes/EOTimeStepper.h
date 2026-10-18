@@ -122,6 +122,7 @@ typedef enum EOTimeScrubState {
 - (bool)isRunning;      // the clock is moving
 - (int)runDirection;    // 0 stopped, 1 forward, -1 backward
 - (bool)isAtPresent;    // it shows the present, so there is nothing to return to
+- (double)offsetFromPresent;    // the displayed time less the real time (NTP's), in seconds
 
 // The odometer: the displayed time's components in the clock's zone; a typed date and time,
 // composed through the hybrid calendar and clamped to the range the astronomy

@@ -43,6 +43,7 @@ static const double EOOdometerDoneWidth = 69;
     UIView         *stepBlock;      // over the equation-of-time dial: the pair
     UIView         *odometer;
     UILabel        *statusLabel;
+    UILabel        *offsetLabel;    // under it: how far the displayed time is from the real time
     UIButton       *nowButton;
     UIButton       *reverseButton;
     UIButton       *pauseButton;

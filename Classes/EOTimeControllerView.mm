@@ -21,6 +21,7 @@ static const double landscapeBlockWidth = 170;
 static const double landscapeBlockHeight = 215;
 static const double blockPad = 8;
 static const double statusHeight = 30;          // the status over Now: two lines, for a scrub at the limit
+static const double offsetHeight = 16;          // and under it, the offset from the real time
 // The blocks' and the odometer's frame, as the location picker's large map has it: black, a gray border
 // (EOClock's header box), a shadow
 static const double frameRadius = 12;
@@ -1150,6 +1151,7 @@ static void styleAsFrame(UIView *view) {
         nowBlock = [self addBlock];
         statusLabel = [self addLabelTo:nowBlock font:[UIFont fontWithName:@"Arial" size:12] color:rgb(0x88, 0xaa, 0xff)];
         statusLabel.numberOfLines = 2;
+        offsetLabel = [self addLabelTo:nowBlock font:[UIFont fontWithName:@"Arial" size:12] color:rgb(0xcc, 0xcc, 0xdd)];
         nowButton = [self addButtonTo:nowBlock title:nil font:nil];
         nowButton.accessibilityLabel = NSLocalizedString(@"Now", @"button: return the clock to the present");
         nowButton.adjustsImageWhenHighlighted = NO;
@@ -1296,9 +1298,10 @@ static void styleAsFrame(UIView *view) {
     }
     double inner = w - 2 * blockPad;
 
-    // The status on top, Now below it, in the middle of what is left
+    // The status on top, the offset under it, Now below them, in the middle of what is left
     statusLabel.frame = CGRectMake(blockPad, blockPad, inner, statusHeight);
-    double nowTop = blockPad + statusHeight + gap;
+    offsetLabel.frame = CGRectMake(blockPad, blockPad + statusHeight, inner, offsetHeight);
+    double nowTop = blockPad + statusHeight + offsetHeight + gap;
     double nowHeight = fmin(64, h - nowTop - blockPad);
     nowButton.frame = CGRectMake(blockPad, nowTop + (h - nowTop - blockPad - nowHeight) / 2, inner, nowHeight);
     [nowButton setImage:[EOTimeControllerView nowIconOfSize:nowHeight - 10] forState:UIControlStateNormal];
@@ -1792,6 +1795,7 @@ static CGAffineTransform transformOnto(UIView *view, CGRect rect) {
         status = [NSString stringWithFormat:@"%@\n%@", status, NSLocalizedString(@"AT LIMIT", @"strip suffix: the time is clamped at the end of the supported range (4000 BCE to 2800 CE)")];
     }
     setLabelText(statusLabel, status);
+    setLabelText(offsetLabel, [self offsetText]);
 
     int drive = [stepper runDirection];
     if (drive != shownDrive) {
@@ -1843,6 +1847,34 @@ static CGAffineTransform transformOnto(UIView *view, CGRect rect) {
             }
         }];
     }
+}
+
+// The displayed time's offset from the real time, signed (+ ahead, − behind), in its two largest units with
+// the scrub rate's abbreviations: "+3 day 4 hour", "−12 min 5 sec"; years of 365.2425 days.  Nothing at the
+// present.
+- (NSString *)offsetText {
+    double offset = round([stepper offsetFromPresent]);
+    if ([stepper isAtPresent] || offset == 0) {
+        return @"";
+    }
+    double rest = fabs(offset);
+    double year = 365.2425 * 86400;
+    double sizes[5] = { year, 86400, 3600, 60, 1 };
+    EOTimeStepUnit units[5] = { EOTimeStepYear, EOTimeStepDay, EOTimeStepHour, EOTimeStepMinute, EOTimeStepSecond };
+    long counts[5];
+    for (int i = 0; i < 5; i++) {
+        counts[i] = (long)floor(rest / sizes[i]);
+        rest -= counts[i] * sizes[i];
+    }
+    int first = 0;
+    while (first < 4 && counts[first] == 0) {
+        first++;
+    }
+    NSString *text = [NSString stringWithFormat:@"%@%ld %@", offset > 0 ? @"+" : @"\u2212", counts[first], [EOTimeStepper labelForUnit:units[first]]];
+    if (first < 4 && counts[first + 1] != 0) {
+        text = [NSString stringWithFormat:@"%@ %ld %@", text, counts[first + 1], [EOTimeStepper labelForUnit:units[first + 1]]];
+    }
+    return text;
 }
 
 - (void)prepareToHide {

@@ -8,6 +8,7 @@
 #import "EOTimeStepper.h"
 #import "Constants.h"
 #import "ESWatchTime.hpp"
+#import "ESTime.hpp"
 #import "ESTimeLocAstroEnvironment.hpp"
 #import "ESAstronomy.hpp"
 #import "ESErrorReporter.hpp"
@@ -425,6 +426,10 @@ static const int numBodies = sizeof(bodyPlanets) / sizeof(bodyPlanets[0]);
 
 - (bool)isAtPresent {
     return time->isCorrect();
+}
+
+- (double)offsetFromPresent {
+    return time->currentTime() - ESTime::currentTime();
 }
 
 //// the date fields
