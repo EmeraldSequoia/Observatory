@@ -178,6 +178,7 @@
 		E0CB83598EFF88D521312402 /* 09-large.jpg in Resources */ = {isa = PBXBuildFile; fileRef = E06EA44D2D2E8FAEBCFDB428 /* 09-large.jpg */; };
 		E0CDC192F4494B30B5337F51 /* 02-large.jpg in Resources */ = {isa = PBXBuildFile; fileRef = E0B2607A69E9895B01E6F8F8 /* 02-large.jpg */; };
 		E0ED5FD9141EE0C91B2550AF /* night-large.jpg in Resources */ = {isa = PBXBuildFile; fileRef = E06717FABA812069D5378594 /* night-large.jpg */; };
+		F1A2B3C4D5E6F70809100A0A /* Localizable.stringsdict in Resources */ = {isa = PBXBuildFile; fileRef = F1A2B3C4D5E6F70809100A09 /* Localizable.stringsdict */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -492,6 +493,14 @@
 		E0E65AD6FA47D7E8A4D4E1F8 /* 07-large.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "07-large.jpg"; sourceTree = "<group>"; };
 		E0ED7A6713862F4BA4E97392 /* 03-large.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "03-large.jpg"; sourceTree = "<group>"; };
 		E0EFA4E9BEE22B5205DBFABE /* EOLocationPickerViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = EOLocationPickerViewController.h; path = Classes/EOLocationPickerViewController.h; sourceTree = "<group>"; };
+		F1A2B3C4D5E6F70809100A01 /* English */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = English; path = en.lproj/Localizable.stringsdict; sourceTree = "<group>"; };
+		F1A2B3C4D5E6F70809100A02 /* Dutch */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = Dutch; path = nl.lproj/Localizable.stringsdict; sourceTree = "<group>"; };
+		F1A2B3C4D5E6F70809100A03 /* French */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = French; path = fr.lproj/Localizable.stringsdict; sourceTree = "<group>"; };
+		F1A2B3C4D5E6F70809100A04 /* German */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = German; path = de.lproj/Localizable.stringsdict; sourceTree = "<group>"; };
+		F1A2B3C4D5E6F70809100A05 /* Italian */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = Italian; path = it.lproj/Localizable.stringsdict; sourceTree = "<group>"; };
+		F1A2B3C4D5E6F70809100A06 /* Japanese */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = Japanese; path = ja.lproj/Localizable.stringsdict; sourceTree = "<group>"; };
+		F1A2B3C4D5E6F70809100A07 /* Spanish */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = Spanish; path = es.lproj/Localizable.stringsdict; sourceTree = "<group>"; };
+		F1A2B3C4D5E6F70809100A08 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.stringsdict"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -582,6 +591,7 @@
 				A98AE2921815C760007924CC /* icon-152.png */,
 				927570E11370E38100E48A2A /* Chime10.wav */,
 				A957755A118030580037803F /* Localizable.strings */,
+				F1A2B3C4D5E6F70809100A09 /* Localizable.stringsdict */,
 				A9D4078A11A3A43600DCE6F8 /* copyright.txt */,
 				A93D9B1B1150AF9A00EF2523 /* help.txt */,
 				9260D40811D280F400556980 /* Chime.wav */,
@@ -1010,6 +1020,7 @@
 				A9B92944115B835A00C5BE0F /* logo.png in Resources */,
 				A9D0F581115EBCA200CAB2B5 /* authors.png in Resources */,
 				A957755B118030580037803F /* Localizable.strings in Resources */,
+				F1A2B3C4D5E6F70809100A0A /* Localizable.stringsdict in Resources */,
 				A98AE2941815C760007924CC /* icon-152.png in Resources */,
 				92ECA8C411A43DE00086BF31 /* InfoPlist.strings in Resources */,
 				A9D4078B11A3A43600DCE6F8 /* copyright.txt in Resources */,
@@ -1235,6 +1246,21 @@
 				A9AAB7A912AA39E6005B43C3 /* zh-Hans */,
 			);
 			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+		F1A2B3C4D5E6F70809100A09 /* Localizable.stringsdict */ = {
+			isa = PBXVariantGroup;
+			children = (
+				F1A2B3C4D5E6F70809100A01 /* English */,
+				F1A2B3C4D5E6F70809100A02 /* Dutch */,
+				F1A2B3C4D5E6F70809100A03 /* French */,
+				F1A2B3C4D5E6F70809100A04 /* German */,
+				F1A2B3C4D5E6F70809100A05 /* Italian */,
+				F1A2B3C4D5E6F70809100A06 /* Japanese */,
+				F1A2B3C4D5E6F70809100A07 /* Spanish */,
+				F1A2B3C4D5E6F70809100A08 /* zh-Hans */,
+			);
+			name = Localizable.stringsdict;
 			sourceTree = "<group>";
 		};
 /* End PBXVariantGroup section */

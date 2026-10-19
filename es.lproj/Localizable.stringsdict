@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>offset days</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>many</key>
+			<string>%ld días</string>
+			<key>one</key>
+			<string>%ld día</string>
+			<key>other</key>
+			<string>%ld días</string>
+		</dict>
+	</dict>
+	<key>offset hours</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>many</key>
+			<string>%ld horas</string>
+			<key>one</key>
+			<string>%ld hora</string>
+			<key>other</key>
+			<string>%ld horas</string>
+		</dict>
+	</dict>
+	<key>offset minutes</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>many</key>
+			<string>%ld minutos</string>
+			<key>one</key>
+			<string>%ld minuto</string>
+			<key>other</key>
+			<string>%ld minutos</string>
+		</dict>
+	</dict>
+	<key>offset seconds</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>many</key>
+			<string>%ld segundos</string>
+			<key>one</key>
+			<string>%ld segundo</string>
+			<key>other</key>
+			<string>%ld segundos</string>
+		</dict>
+	</dict>
+	<key>offset years</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>many</key>
+			<string>%ld años</string>
+			<key>one</key>
+			<string>%ld año</string>
+			<key>other</key>
+			<string>%ld años</string>
+		</dict>
+	</dict>
+</dict>
+</plist>

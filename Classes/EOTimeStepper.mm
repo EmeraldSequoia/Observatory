@@ -452,18 +452,38 @@ static const int numBodies = sizeof(bodyPlanets) / sizeof(bodyPlanets[0]);
     return time->currentTime() - ESTime::currentTime();
 }
 
-// The displayed time's offset from the real time, signed (+ ahead, − behind), in its two largest units with
-// the scrub rate's abbreviations: "+3 day 4 hour", "−12 min 5 sec"; years of 365.2425 days.  Nothing at the
-// present.
+// The displayed time's offset from the real time, signed (+ ahead, − behind), in its two largest units, each
+// pluralized as the language does it (Localizable.stringsdict): "+3 days 4 hours", "−1 minute 5 seconds";
+// years of 365.2425 days.  Nothing at the present.
+static NSString *offsetPart(int unit, long count) {
+    NSString *format;
+    switch (unit) {
+      case 0:
+        format = NSLocalizedString(@"offset years", @"the clock's offset from real time: a number of years (plural rules in Localizable.stringsdict)");
+        break;
+      case 1:
+        format = NSLocalizedString(@"offset days", @"the clock's offset from real time: a number of days (plural rules in Localizable.stringsdict)");
+        break;
+      case 2:
+        format = NSLocalizedString(@"offset hours", @"the clock's offset from real time: a number of hours (plural rules in Localizable.stringsdict)");
+        break;
+      case 3:
+        format = NSLocalizedString(@"offset minutes", @"the clock's offset from real time: a number of minutes (plural rules in Localizable.stringsdict)");
+        break;
+      default:
+        format = NSLocalizedString(@"offset seconds", @"the clock's offset from real time: a number of seconds (plural rules in Localizable.stringsdict)");
+        break;
+    }
+    return [NSString localizedStringWithFormat:format, count];
+}
+
 - (NSString *)offsetString {
     double offset = round([self offsetFromPresent]);
     if ([self isAtPresent] || offset == 0) {
         return @"";
     }
     double rest = fabs(offset);
-    double year = 365.2425 * 86400;
-    double sizes[5] = { year, 86400, 3600, 60, 1 };
-    EOTimeStepUnit units[5] = { EOTimeStepYear, EOTimeStepDay, EOTimeStepHour, EOTimeStepMinute, EOTimeStepSecond };
+    double sizes[5] = { 365.2425 * 86400, 86400, 3600, 60, 1 };     // years, days, hours, minutes, seconds
     long counts[5];
     for (int i = 0; i < 5; i++) {
         counts[i] = (long)floor(rest / sizes[i]);
@@ -473,9 +493,9 @@ static const int numBodies = sizeof(bodyPlanets) / sizeof(bodyPlanets[0]);
     while (first < 4 && counts[first] == 0) {
         first++;
     }
-    NSString *text = [NSString stringWithFormat:@"%@%ld %@", offset > 0 ? @"+" : @"\u2212", counts[first], [EOTimeStepper labelForUnit:units[first]]];
+    NSString *text = [NSString stringWithFormat:@"%@%@", offset > 0 ? @"+" : @"\u2212", offsetPart(first, counts[first])];
     if (first < 4 && counts[first + 1] != 0) {
-        text = [NSString stringWithFormat:@"%@ %ld %@", text, counts[first + 1], [EOTimeStepper labelForUnit:units[first + 1]]];
+        text = [NSString stringWithFormat:@"%@ %@", text, offsetPart(first + 1, counts[first + 1])];
     }
     return text;
 }

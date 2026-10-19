@@ -1577,7 +1577,7 @@ static double resetY;
 static double advButtonWidth;
 static double advButtonHeight;
 static const double nowButtonGap = 8;	// between Set and Go Live, and Set and the offset
-static const double offsetLabelWidth = 220;	// room for the longest offset, "-6026 year 364 day"
+static const double offsetLabelWidth = 220;	// room for the longest offset, "−6026 years 364 days" (it shrinks to fit a longer one)
 
 static double odometerX;		// the time controller's odometer, centred above the main dial
 static double odometerY;
@@ -2062,6 +2062,8 @@ static bool localeIsCyrillic() {
     offsetLab = [self createLabelAtX:resetX-(advButtonWidth+24)/2-nowButtonGap-offsetLabelWidth/2 Y:resetY width:offsetLabelWidth height:advButtonHeight
 				font:[UIFont fontWithName:@"Arial-BoldMT" size:16] fontSize:16];
     offsetLab.textAlignment = NSTextAlignmentRight;
+    offsetLab.adjustsFontSizeToFitWidth = YES;
+    offsetLab.minimumScaleFactor = 0.6;
     offsetLab.textColor = wrongTimeRed;
     offsetLab.hidden = true;
     nowBut.accessibilityLabel = NSLocalizedString(@"Now", @"button: return the clock to the present");
