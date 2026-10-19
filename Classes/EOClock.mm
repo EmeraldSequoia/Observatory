@@ -237,9 +237,14 @@ static NSString *const kEOAlarmNotificationIdentifier = @"EOAlarm";
 	return;
     }
 
-    // Repeat daily at the alarm's local wall-clock time, as measured by the device clock
+    // Repeat daily at the alarm's wall-clock time as the device has it, by its own clock and in its own time zone,
+    // which is what the trigger's hour and minute are matched against (the clock's zone, from a location picked
+    // on the map, may be another)
     ESDateComponents cs;
-    ESCalendar_localDateComponentsFromTimeInterval(ESTime::sysTimeForNTPTime(alarmTime->currentTime()), ESCalendar_localTimeZone(), &cs);
+    [NSTimeZone resetSystemTimeZone];
+    ESTimeZone *deviceZone = ESCalendar_initTimeZoneFromOlsonID([[[NSTimeZone systemTimeZone] name] UTF8String]);
+    ESCalendar_localDateComponentsFromTimeInterval(ESTime::sysTimeForNTPTime(alarmTime->currentTime()), deviceZone, &cs);
+    ESCalendar_releaseTimeZone(deviceZone);
     NSDateComponents *fireComponents = [[[NSDateComponents alloc] init] autorelease];
     fireComponents.hour = cs.hour;
     fireComponents.minute = cs.minute;

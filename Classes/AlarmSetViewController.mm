@@ -10,12 +10,16 @@
 #import	"EOClock.h"
 #import "ESTime.hpp"
 #import "ESWatchTime.hpp"
+#import "ESCalendar.hpp"
 
 @implementation AlarmSetViewController
 
 // Implement viewDidLoad to do additional setup after loading the view, typically from a nib.
 - (void)viewDidLoad {
     [super viewDidLoad];
+    // In the clock's time zone (a location picked on the map brings its own), which the alarm is set in
+    // (setAlarmTime:), not the device's
+    picker.timeZone = ESCalendar_nsTimeZone(ESCalendar_localTimeZone());
     if ([EOClock alarmTime] == nil) {
 	picker.date = [NSDate dateWithTimeIntervalSinceReferenceDate:ESTime::currentTime()];
     } else {
