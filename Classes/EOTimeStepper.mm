@@ -452,6 +452,34 @@ static const int numBodies = sizeof(bodyPlanets) / sizeof(bodyPlanets[0]);
     return time->currentTime() - ESTime::currentTime();
 }
 
+// The displayed time's offset from the real time, signed (+ ahead, − behind), in its two largest units with
+// the scrub rate's abbreviations: "+3 day 4 hour", "−12 min 5 sec"; years of 365.2425 days.  Nothing at the
+// present.
+- (NSString *)offsetString {
+    double offset = round([self offsetFromPresent]);
+    if ([self isAtPresent] || offset == 0) {
+        return @"";
+    }
+    double rest = fabs(offset);
+    double year = 365.2425 * 86400;
+    double sizes[5] = { year, 86400, 3600, 60, 1 };
+    EOTimeStepUnit units[5] = { EOTimeStepYear, EOTimeStepDay, EOTimeStepHour, EOTimeStepMinute, EOTimeStepSecond };
+    long counts[5];
+    for (int i = 0; i < 5; i++) {
+        counts[i] = (long)floor(rest / sizes[i]);
+        rest -= counts[i] * sizes[i];
+    }
+    int first = 0;
+    while (first < 4 && counts[first] == 0) {
+        first++;
+    }
+    NSString *text = [NSString stringWithFormat:@"%@%ld %@", offset > 0 ? @"+" : @"\u2212", counts[first], [EOTimeStepper labelForUnit:units[first]]];
+    if (first < 4 && counts[first + 1] != 0) {
+        text = [NSString stringWithFormat:@"%@ %ld %@", text, counts[first + 1], [EOTimeStepper labelForUnit:units[first + 1]]];
+    }
+    return text;
+}
+
 //// the date fields
 
 - (void)dateComponents:(ESDateComponents *)cs {

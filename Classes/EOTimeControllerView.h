@@ -90,9 +90,10 @@ static const double EOOdometerDoneWidth = 69;
 
 - (id)initWithStepper:(EOTimeStepper *)aStepper clock:(EOClock *)aClock;
 
-// The Now buttons' icon (nowLive.png: a clock, broadcasting, "LIVE"), drawn at the given size in canvas units
+// The Now buttons' icon (nowLive.png's clock, broadcasting, with "GO LIVE" in a box widened for it), drawn at the given size in canvas units
 // and fine enough for the canvas's scaling; a template, so it takes the button's tint
-+ (UIImage *)nowIconOfSize:(double)size;
++ (UIImage *)nowIconOfSize:(double)size;     // size: its height; it is nowIconAspect times as wide
++ (double)nowIconAspect;
 
 // The blocks' shape for the orientation, before EOClock centres them over the dials: a tall block
 // in landscape, where each side's two dials stack in a column, a square in portrait's corners

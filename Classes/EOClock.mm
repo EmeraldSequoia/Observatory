@@ -458,21 +458,31 @@ BOOL timeChanged = false;
     [self setStatusBar:NULL];
 }
 
-// Now (the live-clock icon) left of Set / Done: shown while the time is not the present, whatever moved it there (the
-// controller, or the eclipse demo), and the controller is closed (open, its own Now block has it); checked
-// from tick
+// Go Live (the live-clock icon) right of Set, and the offset from the real time left of it, both red: shown while
+// the time is not the present, whatever moved it there (the controller, or the eclipse demo), and the controller is
+// closed (open, its own Now block has them); checked from tick.  A clock telling the wrong time says so in red.
 - (void)updateNowButton {
     bool hidden = setMode || time->isCorrect();
     if (nowBut.hidden != hidden) {
 	nowBut.hidden = hidden;
+	offsetLab.hidden = hidden;
+    }
+    if (!hidden) {
+	NSString *offset = [stepper offsetString];
+	if (![offsetLab.text isEqualToString:offset]) {
+	    offsetLab.text = offset;
+	}
     }
 }
 
 // Set / Done in the middle of the odometer, where it stays whether the odometer shows or not, so that Set is
-// still under the finger as Done; Now to its left
+// still under the finger as Done; Go Live to its right and the offset, right-aligned, to its left, each the same
+// gap from it
 - (void)placeSetAndNowButtonsForOrientation:(UIInterfaceOrientation)orientation {
+    double setHalf = (advButtonWidth + 24) / 2;
     [self reorientSubView:resetBut toOrientation:orientation offsetBy:CGPointMake(resetX, resetY)];
-    [self reorientSubView:nowBut toOrientation:orientation offsetBy:CGPointMake(resetX - advButtonWidth - 24 - nowButtonGap, resetY)];
+    [self reorientSubView:nowBut toOrientation:orientation offsetBy:CGPointMake(resetX + setHalf + nowButtonGap + nowBut.bounds.size.width / 2, resetY)];
+    [self reorientSubView:offsetLab toOrientation:orientation offsetBy:CGPointMake(resetX - setHalf - nowButtonGap - offsetLabelWidth / 2, resetY)];
 }
 
 // The shield: a transparent button over everything while a scrub runs hands-free, so that the next press
@@ -1566,7 +1576,9 @@ static double resetX;
 static double resetY;
 static double advButtonWidth;
 static double advButtonHeight;
-static const double nowButtonGap = 8;	// between Now and Set / Done
+static const double nowButtonGap = 8;	// between Set and Go Live, and Set and the offset
+static const double offsetLabelWidth = 220;	// room for the longest offset, "-6026 year 364 day"
+
 static double odometerX;		// the time controller's odometer, centred above the main dial
 static double odometerY;
 
@@ -2038,11 +2050,20 @@ static bool localeIsCyrillic() {
     resetBut.titleLabel.adjustsFontSizeToFitWidth = YES;
     //resetBut.titleLabel.font = [UIFont fontWithName:@"Arial" size:18];
 
-    // Now, the live-clock icon, shown beside it while the time is not the present (updateNowButton)
-    nowBut = [self createButtonAtX:resetX-(advButtonWidth+24+nowButtonGap) Y:resetY width:advButtonWidth+24 height:advButtonHeight highlight:true
+    // Go Live, the live-clock icon, and the offset from the real time, either side of it while the time is not the
+    // present (updateNowButton), in red: the clock is wrong
+    double iconHeight = advButtonHeight - 4;
+    double nowWidth = iconHeight * [EOTimeControllerView nowIconAspect];
+    UIColor *wrongTimeRed = [UIColor colorWithRed:1 green:0.23 blue:0.19 alpha:1];
+    nowBut = [self createButtonAtX:resetX+(advButtonWidth+24)/2+nowButtonGap+nowWidth/2 Y:resetY width:nowWidth height:advButtonHeight highlight:true
 			     text:nil color:nil];
-    [nowBut setImage:[EOTimeControllerView nowIconOfSize:advButtonHeight - 4] forState:UIControlStateNormal];
-    nowBut.tintColor = [UIColor whiteColor];
+    [nowBut setImage:[EOTimeControllerView nowIconOfSize:iconHeight] forState:UIControlStateNormal];
+    nowBut.tintColor = wrongTimeRed;
+    offsetLab = [self createLabelAtX:resetX-(advButtonWidth+24)/2-nowButtonGap-offsetLabelWidth/2 Y:resetY width:offsetLabelWidth height:advButtonHeight
+				font:[UIFont fontWithName:@"Arial-BoldMT" size:16] fontSize:16];
+    offsetLab.textAlignment = NSTextAlignmentRight;
+    offsetLab.textColor = wrongTimeRed;
+    offsetLab.hidden = true;
     nowBut.accessibilityLabel = NSLocalizedString(@"Now", @"button: return the clock to the present");
 
 #ifdef INNER_SUBDIALS

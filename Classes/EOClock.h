@@ -129,7 +129,8 @@ class ClockTimeSyncObserver;
 
     UIButton		*demoBut;
     UIButton		*resetBut;	// opens and closes the time controller ("Set" / "Done")
-    UIButton		*nowBut;	// Now (the live-clock icon) beside Set / Done: back to the present, shown while the time is not it
+    UIButton		*nowBut;	// Go Live (the live-clock icon, red) right of Set: back to the present, shown while the time is not it
+    UILabel		*offsetLab;	// left of Set, with Go Live: how far the time shown is from the real time, in bold red
     EOTimeStepper	*stepper;	// the time controller's model
     EOTimeControllerView *timePanel;	// and its panel
     UILongPressGestureRecognizer *displayPress;	// a press on the display closes the panel (the base view's; not retained)

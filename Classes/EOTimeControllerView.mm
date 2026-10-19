@@ -1279,13 +1279,83 @@ static void styleAsFrame(UIView *view) {
     [super dealloc];
 }
 
+// The icon: nowLive.png's clock and its broadcast waves, and in place of its box around "LIVE", a box as wide as
+// "GO LIVE" needs, drawn as the original is (in the png's 512-unit square: a 16-unit line with rounded ends and
+// corners, a break in each side) around the words in a rounded bold face of the original's height
+static const double iconSquare = 512;           // the png's size
+static const double iconLine = 16;
+static const double iconBoxLeft = 144;          // the box's outer edges
+static const double iconBoxTop = 280;
+static const double iconBoxBottom = 440;
+static const double iconTextLeft = 200;         // the words: where they start, their baseline, their capitals' height
+static const double iconBaseline = 400;
+static const double iconCapHeight = 80;
+static const double iconTextRightPad = 57;      // inside the box's line, after the words
+static const double iconRightMargin = 17;       // outside it
+
+static UIFont *iconFont() {
+    UIFont *font = [UIFont fontWithName:@"ArialRoundedMTBold" size:100];
+    if (!font) {
+        font = [UIFont systemFontOfSize:100 weight:UIFontWeightBold];
+    }
+    return [font fontWithSize:100 * iconCapHeight / font.capHeight];
+}
+
+static NSString *iconWords() {
+    return @"GO LIVE";      // as the png's LIVE, in English everywhere
+}
+
+static NSDictionary *iconAttributes() {
+    return [NSDictionary dictionaryWithObjectsAndKeys:iconFont(), NSFontAttributeName, [UIColor blackColor], NSForegroundColorAttributeName,
+                                                      [UIColor blackColor], NSStrokeColorAttributeName,
+                                                      [NSNumber numberWithDouble:6], NSKernAttributeName,
+                                                      [NSNumber numberWithDouble:-3], NSStrokeWidthAttributeName, nil];   // filled, and outlined to the box's weight
+}
+
+// The icon's width, in the png's units
+static double iconWidth() {
+    double textWidth = [iconWords() sizeWithAttributes:iconAttributes()].width;
+    return iconTextLeft + textWidth + iconTextRightPad + iconLine + iconRightMargin;
+}
+
++ (double)nowIconAspect {
+    return iconWidth() / iconSquare;
+}
+
 + (UIImage *)nowIconOfSize:(double)size {
     UIImage *source = [UIImage imageNamed:@"nowLive"];
+    double width = iconWidth();
     UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat preferredFormat];
     format.scale = 4;       // the screen's 2 or 3, and the canvas's scaling up to fill the window on top
-    UIGraphicsImageRenderer *renderer = [[[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(size, size) format:format] autorelease];
-    UIImage *icon = [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
-        [source drawInRect:CGRectMake(0, 0, size, size)];
+    UIGraphicsImageRenderer *renderer = [[[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(size * width / iconSquare, size) format:format] autorelease];
+    UIImage *icon = [renderer imageWithActions:^(UIGraphicsImageRendererContext *rendererContext) {
+        CGContextRef context = rendererContext.CGContext;
+        CGContextScaleCTM(context, size / iconSquare, size / iconSquare);
+        // The clock and the waves: all of the png but its box
+        CGContextSaveGState(context);
+        CGContextAddRect(context, CGRectMake(0, 0, width, iconSquare));
+        CGContextAddRect(context, CGRectMake(iconBoxLeft - 2, iconBoxTop - 2, iconSquare, iconBoxBottom - iconBoxTop + 4));
+        CGContextEOClip(context);
+        [source drawInRect:CGRectMake(0, 0, iconSquare, iconSquare)];
+        CGContextRestoreGState(context);
+        // The box, along its line's middle; each side's break is where the png's is
+        double l = iconBoxLeft + iconLine / 2, t = iconBoxTop + iconLine / 2, b = iconBoxBottom - iconLine / 2;
+        double r = width - iconRightMargin - iconLine / 2;
+        CGContextSetLineWidth(context, iconLine);
+        CGContextSetLineCap(context, kCGLineCapRound);
+        CGContextSetLineJoin(context, kCGLineJoinRound);
+        CGContextSetGrayStrokeColor(context, 0, 1);
+        CGContextMoveToPoint(context, l, 344);
+        CGContextAddLineToPoint(context, l, b);
+        CGContextAddLineToPoint(context, r, b);
+        CGContextAddLineToPoint(context, r, 408);
+        CGContextMoveToPoint(context, r, 376);
+        CGContextAddLineToPoint(context, r, t);
+        CGContextAddLineToPoint(context, l, t);
+        CGContextAddLineToPoint(context, l, 312);
+        CGContextStrokePath(context);
+        UIFont *font = iconFont();
+        [iconWords() drawAtPoint:CGPointMake(iconTextLeft, iconBaseline - font.ascender) withAttributes:iconAttributes()];
     }];
     return [icon imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
 }
@@ -1813,7 +1883,7 @@ static CGAffineTransform transformOnto(UIView *view, CGRect rect) {
         status = [NSString stringWithFormat:@"%@\n%@", status, NSLocalizedString(@"AT LIMIT", @"strip suffix: the time is clamped at the end of the supported range (4000 BCE to 2800 CE)")];
     }
     setLabelText(statusLabel, status);
-    setLabelText(offsetLabel, [self offsetText]);
+    setLabelText(offsetLabel, [stepper offsetString]);
 
     int drive = [stepper runDirection];
     if (drive != shownDrive) {
@@ -1865,34 +1935,6 @@ static CGAffineTransform transformOnto(UIView *view, CGRect rect) {
             }
         }];
     }
-}
-
-// The displayed time's offset from the real time, signed (+ ahead, − behind), in its two largest units with
-// the scrub rate's abbreviations: "+3 day 4 hour", "−12 min 5 sec"; years of 365.2425 days.  Nothing at the
-// present.
-- (NSString *)offsetText {
-    double offset = round([stepper offsetFromPresent]);
-    if ([stepper isAtPresent] || offset == 0) {
-        return @"";
-    }
-    double rest = fabs(offset);
-    double year = 365.2425 * 86400;
-    double sizes[5] = { year, 86400, 3600, 60, 1 };
-    EOTimeStepUnit units[5] = { EOTimeStepYear, EOTimeStepDay, EOTimeStepHour, EOTimeStepMinute, EOTimeStepSecond };
-    long counts[5];
-    for (int i = 0; i < 5; i++) {
-        counts[i] = (long)floor(rest / sizes[i]);
-        rest -= counts[i] * sizes[i];
-    }
-    int first = 0;
-    while (first < 4 && counts[first] == 0) {
-        first++;
-    }
-    NSString *text = [NSString stringWithFormat:@"%@%ld %@", offset > 0 ? @"+" : @"\u2212", counts[first], [EOTimeStepper labelForUnit:units[first]]];
-    if (first < 4 && counts[first + 1] != 0) {
-        text = [NSString stringWithFormat:@"%@ %ld %@", text, counts[first + 1], [EOTimeStepper labelForUnit:units[first + 1]]];
-    }
-    return text;
 }
 
 - (void)prepareToHide {
