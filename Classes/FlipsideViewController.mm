@@ -336,12 +336,8 @@ static NSTimer *alarmTestButtonTimer = nil;
 	lat = fmin(90, fmax(-90, lat));
 	double lng = [longField.text floatValue];
 	lng = fmin(180, fmax(-180, lng));
-        if ([[NSUserDefaults standardUserDefaults] stringForKey:@"EOManualTimeZone"]) {
-            // Typed coordinates use the device's time zone, not one picked with an earlier location on the map
-            [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"EOManualTimeZone"];
-            [[EOClock theClock] resetTZ];
-        }
-        [[EOClock theClock] env]->location()->setToUserLocation(lat, lng, 0/*accuracyInMeters*/);
+        // As a location picked on the map: the time zone of the nearest city comes with it
+        [[EOClock theClock] setManualLocationLatitude:lat longitude:lng];
     }
     [textField resignFirstResponder];
     //traceExit("textFieldDidEndEditing");
