@@ -326,7 +326,12 @@ static NSTimer *alarmTestButtonTimer = nil;
 
 - (void)textFieldDidEndEditing:(UITextField *)textField {
     //traceEnter("textFieldDidEndEditing");
-    if (!ULSSwitch.on) {
+    // Only coordinates that were changed: a field merely left (a click in it and out, or the screen closing, on a
+    // Mac especially) must not re-enter the location, which would drop a time zone picked with it on the map
+    ESLocation *location = [[EOClock theClock] env]->location();
+    bool changed = ![latField.text isEqualToString:[NSString stringWithFormat:@"%.3f", location->latitudeDegrees()]]
+                || ![longField.text isEqualToString:[NSString stringWithFormat:@"%.3f", location->longitudeDegrees()]];
+    if (!ULSSwitch.on && changed) {
 	double lat = [latField.text floatValue];
 	lat = fmin(90, fmax(-90, lat));
 	double lng = [longField.text floatValue];
