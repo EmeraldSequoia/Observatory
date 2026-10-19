@@ -638,10 +638,11 @@ BOOL timeChanged = false;
 
 static int ticks = 0;
 
+// The lower-left dot: the NTP fix, green when good, yellow when not, blinking while it is being sought.  Green turns
+// purple while the location is overridden (picked on the map or typed), as Chronometer's dot does, so that a clock
+// set somewhere else says so.
 - (UIColor *)NTPStatusColor {
-//  if ([ECOptions purpleZone]) {
-//      return ECmagenta;
-//  }
+    UIColor *good = env->location()->isDeviceLocation() ? [UIColor greenColor] : [UIColor colorWithRed:0.75 green:0.35 blue:1 alpha:1];
     ESTimeSourceStatus status = ESTime::currentStatus();
     switch (status) {
       case ESTimeSourceStatusOff:                   // No synchronization is being done
@@ -649,11 +650,11 @@ static int ticks = 0;
       case ESTimeSourceStatusSynchronized:          // We're good
       case ESTimeSourceStatusNoNetSynchronized:     // We were synchronized before but the net wasn't available when the user asked for a resync
       case ESTimeSourceStatusFailedSynchronized:    // We were synchronized before but we failed when the user asked for a resync
-        return [UIColor greenColor];
+        return good;
       case ESTimeSourceStatusPollingRefining:       // We were kind of good (failedRefining) and the user has asked for a resync and we're trying
       case ESTimeSourceStatusPollingSynchronized:   // We're good but the user has asked for a resync and we're trying
       case ESTimeSourceStatusRefining:              // We've gotten some packets but they aren't good enough to say we're good
-        return ((ticks % EOClockUpdate) > EOClockUpdate/2) ? [UIColor  greenColor] : [UIColor clearColor];
+        return ((ticks % EOClockUpdate) > EOClockUpdate/2) ? good : [UIColor clearColor];
       case ESTimeSourceStatusPollingUnsynchronized: // We know nothing but we're trying
       case ESTimeSourceStatusFailedRefining:        // We got some packets so we're kind of synchronized but not completely good
       case ESTimeSourceStatusNoNetRefining:         // We had some packets before but the net wasn't available when we tried to refine

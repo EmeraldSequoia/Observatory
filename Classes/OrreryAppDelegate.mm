@@ -225,7 +225,7 @@ nil,
 NSString *h7 = NSLocalizedStringWithDefaultValue(@"Help Text7",
 nil,
 [NSBundle mainBundle],
-@"Emerald Observatory keeps its time display synchronized via NTP to the international standard atomic clocks.  This requires an Internet connection and it may take a few seconds each time the app starts up to synchronize.  The indicator in the lower left corner blinks while the sync in in progress and turns steady green when its completed successfully or steady yellow if a sync was not possible.",
+@"Emerald Observatory keeps its time display synchronized via NTP to the international standard atomic clocks.  This requires an Internet connection and it may take a few seconds each time the app starts up to synchronize.  The indicator in the lower left corner blinks while the sync is in progress and turns steady green when it's completed successfully or steady yellow if a sync was not possible.  If you've set the location yourself (on the Earth map or by typing coordinates), the indicator is purple instead of green.",
 @"help message7");
 
 NSString *h8 = NSLocalizedStringWithDefaultValue(@"Help Text8",
