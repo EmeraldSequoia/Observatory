@@ -114,8 +114,10 @@ typedef enum EOTimeScrubState {
 
 // The transport: ‖ freezes the clock where it is, ▶ runs it on from there at real speed, ◀ runs
 // it backward at real speed (the views schedule by direction: EOScheduledView), Now returns to
-// the present (running)
+// the present (running).  ‖ again, on a frozen clock, runs it on the way it last ran
+// (togglePause).
 - (void)stop;
+- (void)togglePause;
 - (void)play;
 - (void)playReverse;
 - (void)now;

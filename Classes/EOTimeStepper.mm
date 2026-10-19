@@ -405,6 +405,16 @@ static const int numBodies = sizeof(bodyPlanets) / sizeof(bodyPlanets[0]);
     [client transportDidChange];
 }
 
+- (void)togglePause {
+    if (!time->isStopped()) {
+        [self stop];
+    } else if (time->lastMotionWasInReverse()) {
+        [self playReverse];
+    } else {
+        [self play];
+    }
+}
+
 - (void)play {
     [self endPress];
     time->setWarp(1.0);   // not start(): that would resume at whatever speed preceded the freeze

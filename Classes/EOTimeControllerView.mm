@@ -1508,7 +1508,7 @@ static CGAffineTransform transformOnto(UIView *view, CGRect rect) {
 }
 
 - (void)pausePressed:(UIButton *)sender {
-    [stepper stop];
+    [stepper togglePause];      // a second press un-pauses
     [self refresh];
 }
 
