@@ -191,6 +191,19 @@ static void styleWheel(UITextField *field, bool typing) {
     }
 }
 
+// A wheel's field: digits only, with no edit menu (a Mac's right click, a long press) and nothing to cut,
+// copy, paste or look up in it
+@interface EOWheelField : UITextField
+@end
+
+@implementation EOWheelField
+
+- (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
+    return NO;
+}
+
+@end
+
 // Write a label or a field only when its text changes: refresh runs twenty times a second
 static void setLabelText(UILabel *label, NSString *text) {
     if (![label.text isEqualToString:text]) {
@@ -1092,7 +1105,7 @@ static void styleAsFrame(UIView *view) {
 // An odometer wheel: a thumbwheel, which a vertical drag on it rolls (the odometer's, wheelPanned:), and over
 // its window a field, which takes digits from the keyboard only while the keyboard switch is on (keyboardTapped:)
 - (UITextField *)addWheelWithPlaceholder:(NSString *)placeholder unit:(EOTimeStepUnit)unit {
-    UITextField *field = [[UITextField alloc] initWithFrame:CGRectZero];
+    UITextField *field = [[EOWheelField alloc] initWithFrame:CGRectZero];
     field.font = [UIFont monospacedDigitSystemFontOfSize:18 weight:UIFontWeightMedium];
     field.tintColor = rgb(0x33, 0x55, 0xcc);
     field.textAlignment = NSTextAlignmentCenter;
@@ -1689,6 +1702,11 @@ static CGAffineTransform transformOnto(UIView *view, CGRect rect) {
     }
     NSUInteger length = [textField.text length] - range.length + [string length];
     return length <= (textField == yearField ? 4 : 2);
+}
+
+// No edit menu over a wheel (see EOWheelField)
+- (UIMenu *)textField:(UITextField *)textField editMenuForCharactersInRange:(NSRange)range suggestedActions:(NSArray<UIMenuElement *> *)suggestedActions {
+    return [UIMenu menuWithChildren:[NSArray array]];
 }
 
 - (void)textFieldDidBeginEditing:(UITextField *)textField {
