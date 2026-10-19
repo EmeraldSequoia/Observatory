@@ -201,14 +201,8 @@ nil,
 NSString *h2 = NSLocalizedStringWithDefaultValue(@"Help Text2",
 nil,
 [NSBundle mainBundle],
-@"Tap 'Set' to open the time controller.  Choose what a step means — a century, year, month, day, hour, minute or second, or the rise, set or transit of a body, or the Moon's quarter phase — then tap ◀ or ▶ to move the time back or forward by one.  You can also type a date and time, run the clock forward or backward at normal speed with ▶ and ◀ in the top row, and stop it with ‖.",
+@"Tap 'Set' to open the time controller.  Most of the controller should be obvious, except for the time scrub: hold ◀ or ▶ in the bottom right box to scrub through time; let go to stop.  Slide your finger outside the dial's circle before lifting it and the scrub keeps going hands-free (a green padlock shows when a lift will do that); tap anywhere to stop it.",
 @"help message2");
-
-NSString *h3 = NSLocalizedStringWithDefaultValue(@"Help Text3",
-nil,
-[NSBundle mainBundle],
-@"Hold ◀ or ▶ to scrub through time; let go to stop.  Slide your finger off the button before lifting it and the scrub keeps going hands-free (a green padlock shows when a lift will do that); tap anywhere to stop it.  Tap 'LIVE' to return to the present, and '✕', or anywhere on the display, to close the controller.",
-@"help message3");
 
 NSString *h4 = NSLocalizedStringWithDefaultValue(@"Help Text4",
 nil,
@@ -219,7 +213,7 @@ nil,
 NSString *h5 = NSLocalizedStringWithDefaultValue(@"Help Text5",
 nil,
 [NSBundle mainBundle],
-@"The red dot on the Earth map marks the current location.  If it isn't what you expect you may want to set it manually using the controls above.  If your location and timezone don't match then the astronomical information will look weird.  You can also tap the Earth map to pick a location on a larger map; the timezone changes to match.",
+@"The red dot on the Earth map marks the current location.  If it isn't what you expect you may want to set it manually by tapping on the Earth map to pick a location on a larger map.  Pick the blue dot to return to using the iOS location information.",
 @"help message5");
 
 NSString *h6 = NSLocalizedStringWithDefaultValue(@"Help Text6",
@@ -296,7 +290,6 @@ NSString *translationQueue6 = NSLocalizedString(@"%Off by", @"phrase to indicate
     printf("%s\n\n", [h0 UTF8String]);
     printf("%s\n\n", [h1 UTF8String]);
     printf("%s\n\n", [h2 UTF8String]);
-    printf("%s\n\n", [h3 UTF8String]);
     printf("%s\n\n", [h4 UTF8String]);
     printf("%s\n\n", [h5 UTF8String]);
     printf("%s\n\n", [h6 UTF8String]);

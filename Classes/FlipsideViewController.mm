@@ -166,7 +166,6 @@ static NSDateFormatter	*dateFormatter, *alarmTimeFormatter;
     helpText.text = [[helpText.text stringByAppendingString:[[NSBundle mainBundle] localizedStringForKey:@"Help Text1" value:nil table:nil]] stringByAppendingString:@"\n\n"];
     helpText.text = [[helpText.text stringByAppendingString:[[NSBundle mainBundle] localizedStringForKey:@"Help Text1.5" value:nil table:nil]] stringByAppendingString:@"\n\n"];
     helpText.text = [[helpText.text stringByAppendingString:[[NSBundle mainBundle] localizedStringForKey:@"Help Text2" value:nil table:nil]] stringByAppendingString:@"\n\n"];
-    helpText.text = [[helpText.text stringByAppendingString:[[NSBundle mainBundle] localizedStringForKey:@"Help Text3" value:nil table:nil]] stringByAppendingString:@"\n\n"];
     helpText.text = [[helpText.text stringByAppendingString:[[NSBundle mainBundle] localizedStringForKey:@"Help Text4" value:nil table:nil]] stringByAppendingString:@"\n\n"];
     helpText.text = [[helpText.text stringByAppendingString:[[NSBundle mainBundle] localizedStringForKey:@"Help Text5" value:nil table:nil]] stringByAppendingString:@"\n\n"];
     helpText.text = [[helpText.text stringByAppendingString:[[NSBundle mainBundle] localizedStringForKey:@"Help Text6" value:nil table:nil]] stringByAppendingString:@"\n\n"];
