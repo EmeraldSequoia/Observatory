@@ -207,7 +207,7 @@ nil,
 NSString *h3 = NSLocalizedStringWithDefaultValue(@"Help Text3",
 nil,
 [NSBundle mainBundle],
-@"Hold ◀ or ▶ to scrub through time; let go to stop.  Slide your finger off the button before lifting it and the scrub keeps going hands-free (a green padlock shows when a lift will do that); tap anywhere to stop it.  Tap 'Now' to return to the present, and 'Done', or anywhere on the display, to close the controller.",
+@"Hold ◀ or ▶ to scrub through time; let go to stop.  Slide your finger off the button before lifting it and the scrub keeps going hands-free (a green padlock shows when a lift will do that); tap anywhere to stop it.  Tap 'LIVE' to return to the present, and '✕', or anywhere on the display, to close the controller.",
 @"help message3");
 
 NSString *h4 = NSLocalizedStringWithDefaultValue(@"Help Text4",
