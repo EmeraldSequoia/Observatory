@@ -167,6 +167,7 @@ textScale() {
 	[loupeLayer addSublayer:loupeClipLayer];
 	loupeMapLayer = [[CALayer alloc] init];
 	loupeMapLayer.anchorPoint = CGPointZero;
+	loupeMapLayer.minificationFilter = kCAFilterTrilinear;  // the map image can have more pixels than the magnifier shows
 	[loupeClipLayer insertSublayer:loupeMapLayer atIndex:0];  // under the border
 	loupeRedDotLayer = [[CAShapeLayer alloc] init];
 	loupeRedDotLayer.fillColor = redDotLayer.fillColor;
@@ -300,6 +301,9 @@ textScale() {
     blueDotLayer.lineWidth = 0.5 * markScale;
     blueDotLayer.position = [self blueDotPoint];
     // The magnifier's dots are the same, magnified with the map
+    if (framed) {
+	[self makeLoupeImage];
+    }
     loupeMapLayer.bounds = CGRectMake(0, 0, bounds.size.width * LOUPE_MAGNIFICATION, bounds.size.height * LOUPE_MAGNIFICATION);
     CATransform3D magnify = CATransform3DMakeScale(LOUPE_MAGNIFICATION, LOUPE_MAGNIFICATION, 1);
     for (CAShapeLayer *dot in @[ loupeRedDotLayer, loupeBlueDotLayer ]) {
@@ -399,16 +403,23 @@ textScale() {
     [self drawMapInContext:UIGraphicsGetCurrentContext() size:self.bounds.size markScale:[self markScale]];
 }
 
-// The magnifier's map:  drawn once, at the image's own resolution, so moving the magnifier only moves a layer
+// The magnifier's map:  drawn once, as many pixels as the magnifier shows (no more than the image has), so moving the
+// magnifier only moves a layer.  Drawn again if the map grows (the iPad turned to landscape).
 - (void)makeLoupeImage {
-    if (loupeImage || self.bounds.size.width <= 0) {
+    if (self.bounds.size.width <= 0) {
 	return;
     }
-    CGSize size = img.size;
+    double width = fmin(img.size.width, ceil(self.bounds.size.width * LOUPE_MAGNIFICATION * self.traitCollection.displayScale));
+    if (loupeImage && loupeImage.size.width >= width) {
+	return;
+    }
+    [loupeImage release];
+    CGSize size = CGSizeMake(width, round(width / 2));
     double markScale = [self markScale] * size.width / self.bounds.size.width;
     UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat preferredFormat];
     format.scale = 1;
     format.opaque = YES;
+    format.preferredRange = UIGraphicsImageRendererFormatRangeStandard;  // the maps are sRGB; wide color would double the memory
     UIGraphicsImageRenderer *renderer = [[[UIGraphicsImageRenderer alloc] initWithSize:size format:format] autorelease];
     loupeImage = [[renderer imageWithActions:^(UIGraphicsImageRendererContext *rendererContext) {
 	[self drawMapInContext:rendererContext.CGContext size:size markScale:markScale];
