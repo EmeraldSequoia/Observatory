@@ -1287,7 +1287,7 @@
 					"$(inherited)",
 					"\"$(SRCROOT)\"",
 				);
-				MARKETING_VERSION = 1.7;
+				MARKETING_VERSION = 1.7.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.emeraldsequoia.${PRODUCT_NAME:rfc1034identifier}";
 				PRODUCT_NAME = Observatory;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1318,7 +1318,7 @@
 					"$(inherited)",
 					"\"$(SRCROOT)\"",
 				);
-				MARKETING_VERSION = 1.7;
+				MARKETING_VERSION = 1.7.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.emeraldsequoia.${PRODUCT_NAME:rfc1034identifier}";
 				PRODUCT_NAME = Observatory;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1401,7 +1401,7 @@
 					"$(inherited)",
 					"\"$(SRCROOT)\"",
 				);
-				MARKETING_VERSION = 1.7;
+				MARKETING_VERSION = 1.7.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.emeraldsequoia.${PRODUCT_NAME:rfc1034identifier}";
 				PRODUCT_NAME = Observatory;
 				PROVISIONING_PROFILE_SPECIFIER = "";
