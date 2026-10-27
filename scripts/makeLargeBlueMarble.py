@@ -50,10 +50,10 @@ for month in range(1, 13):
     out = land * (1 - w) + NAVY * w
     img = Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
     path = f'{OUT}/{month:02d}-large.jpg'
-    img.save(path, quality=85, optimize=True)
+    img.save(path, quality=65, optimize=True)
     print(path, os.path.getsize(path))
 
 night = Image.open(f'{SRC}/night-src.tif').convert('RGB')  # already 8192x4096
 path = f'{OUT}/night-large.jpg'
-night.save(path, quality=85, optimize=True)
+night.save(path, quality=65, optimize=True)
 print(path, os.path.getsize(path))
