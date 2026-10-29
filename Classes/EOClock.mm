@@ -679,6 +679,7 @@ static int ticks = 0;
     bigDate2.text = [bigDate2Formatter stringFromDate:currentDate];
     utcdayLabel.text = [utcDateFormatter stringFromDate:currentDate];
     tzLabel.text = [tzFormatter stringFromDate:currentDate];
+    [self setZoneName];
     yearLabel.text = [NSString stringWithFormat:@"%d", time->yearNumberUsingEnv(env)];
     yearLabel.textColor = time->eraNumberUsingEnv(env) == 0 ? [UIColor redColor] : [UIColor whiteColor];
     int yearNumber = time->yearNumberUsingEnv(env);
@@ -827,10 +828,15 @@ static bool firstAfterComingToForeground = true;
     [self setZoneName];
 }
 
-// "Pacific Time", "India Standard Time":  the generic name, which doesn't change with daylight saving time
+// "Pacific Daylight Time", "Japan Standard Time":  daylight or standard as the clock's time has it, like the zone's
+// abbreviation on the dial
 - (void)setZoneName {
+    if (!zoneNameLabel || !time) {
+	return;
+    }
     NSTimeZone *nsTZ = ESCalendar_nsTimeZone(ESCalendar_localTimeZone());
-    zoneNameLabel.text = [nsTZ localizedName:NSTimeZoneNameStyleGeneric locale:[NSLocale currentLocale]];
+    NSTimeZoneNameStyle style = [nsTZ isDaylightSavingTimeForDate:time->currentDate()] ? NSTimeZoneNameStyleDaylightSaving : NSTimeZoneNameStyleStandard;
+    zoneNameLabel.text = [nsTZ localizedName:style locale:[NSLocale currentLocale]];
 }
 
 // Call after changing ESCalendar's local time zone
