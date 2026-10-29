@@ -18,6 +18,7 @@
 #include "ESLocation.hpp"
 #include "ESTimeLocAstroEnvironment.hpp"
 #include "ESWatchTime.hpp"
+#include "ESCalendar.hpp"
 
 static double tzOffset;
 static NSDateFormatter	*dateFormatter, *alarmTimeFormatter;
@@ -62,7 +63,16 @@ static NSDateFormatter	*dateFormatter, *alarmTimeFormatter;
     [self setLabels];
 }
 
+// The date and the alarm show in the clock's time zone (a location picked on the map brings its own), which the
+// alarm is set in, not the device's.  Set each time, as the zone can change while this page shows.
+static void setClockTimeZone() {
+    NSTimeZone *zone = ESCalendar_nsTimeZone(ESCalendar_localTimeZone());
+    dateFormatter.timeZone = zone;
+    alarmTimeFormatter.timeZone = zone;
+}
+
 - (void)tick {
+    setClockTimeZone();
     dateLabel.text = [dateFormatter stringFromDate:[[EOClock theClock] time]->currentDate()];
     [self setLabels];
 }
@@ -92,6 +102,7 @@ static NSDateFormatter	*dateFormatter, *alarmTimeFormatter;
     [dateFormatter setTimeStyle:NSDateFormatterFullStyle];
     [dateFormatter setDateStyle:NSDateFormatterFullStyle];
     [alarmTimeFormatter setTimeStyle:NSDateFormatterShortStyle];
+    setClockTimeZone();
     self.view.backgroundColor = [UIColor blackColor];
     // helpText.backgroundColor = [UIColor viewFlipsideBackgroundColor];
     self.title = NSLocalizedString(@"Options", @"Title for options settings screen");
@@ -276,6 +287,7 @@ static NSTimer *alarmTestButtonTimer = nil;
 
 - (void)presentationControllerDidDismiss:(UIPresentationController *)presentationController {
     printf("Setting alarm time from popover\n");
+    setClockTimeZone();
     alarmValueLabel.text = [alarmTimeFormatter stringFromDate:[EOClock alarmTime]->currentDate()];
 }
 
