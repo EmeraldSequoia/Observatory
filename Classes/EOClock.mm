@@ -824,6 +824,13 @@ static bool firstAfterComingToForeground = true;
     [tzFormatter setTimeZone:nsTZ];
     [bigDateFormatter setTimeZone:nsTZ];
     [bigDate2Formatter setTimeZone:nsTZ];
+    [self setZoneName];
+}
+
+// "Pacific Time", "India Standard Time":  the generic name, which doesn't change with daylight saving time
+- (void)setZoneName {
+    NSTimeZone *nsTZ = ESCalendar_nsTimeZone(ESCalendar_localTimeZone());
+    zoneNameLabel.text = [nsTZ localizedName:NSTimeZoneNameStyleGeneric locale:[NSLocale currentLocale]];
 }
 
 // Call after changing ESCalendar's local time zone
@@ -1569,6 +1576,8 @@ static double tzX;
 static double tzY;
 static double tzW;
 static double utcdayX,utcdayY;
+static double zoneNameY;  // the time zone's name, just under the small map
+#define ZONE_NAME_HEIGHT 12
 static double logoX;
 static double logoY;
 static double bdX;
@@ -1691,6 +1700,7 @@ static double odometerY;
     resetY = odometerY;
     EVX = BMX + centerX;
     EVY = BMY + centerY;
+    zoneNameY = BMY - bmh*earthMasterScale/2 - headerLineWidth - ZONE_NAME_HEIGHT/2 - 1;
     
     riseSetUpdate = 3600;
     planetUpdate = 3600;
@@ -2025,6 +2035,11 @@ static bool localeIsCyrillic() {
     tzLabel = [self createLabelAtX:tzX Y:tzY width:tzW height:14 fontSize:14];
     tzLabel.textColor = [UIColor colorWithRed:1 green:1 blue:1 alpha:0.75];
     
+    // The time zone's name, under the small map:  a location picked there brings its own zone, which might surprise
+    zoneNameLabel = [self createLabelAtX:BMX Y:zoneNameY width:bmw*earthMasterScale height:ZONE_NAME_HEIGHT fontSize:10];
+    zoneNameLabel.textColor = [UIColor colorWithRed:1 green:1 blue:1 alpha:0.75];
+    [self setZoneName];
+
     // UTC day label
     utcdayLabel = [self createLabelAtX:utcdayX Y:utcdayY width:tzW height:14 fontSize:10];
     utcdayLabel.textColor = [UIColor colorWithRed:1 green:1 blue:1 alpha:0.75];
@@ -2317,6 +2332,7 @@ static bool localeIsCyrillic() {
 	[self reorientSubView:utcdayLabel toOrientation:newOrientation offsetBy:CGPointMake(utcdayX, utcdayY+(UIInterfaceOrientationIsLandscape(newOrientation)?3
                                                                                                               :0))];
 	[self reorientSubView:tzLabel toOrientation:newOrientation offsetBy:CGPointMake(tzX, tzY+(UIInterfaceOrientationIsLandscape(newOrientation)?6:0))];
+	[self reorientSubView:zoneNameLabel toOrientation:newOrientation offsetBy:CGPointMake(BMX, zoneNameY)];
 	[self reorientSubView:NTPStatusLabel toOrientation:newOrientation offsetBy:CGPointMake(NTPStatusX, NTPStatusY)];
         [self reorientSubView:NTPStatusBut toOrientation:newOrientation offsetBy:CGPointMake(NTPStatusX, NTPStatusY)];
         

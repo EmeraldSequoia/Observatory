@@ -36,6 +36,7 @@ class ClockTimeSyncObserver;
     UILabel		*bigDate2;
     UILabel		*utcdayLabel;
     UILabel		*tzLabel;
+    UILabel		*zoneNameLabel;
     UILabel		*azLabel;
     UILabel		*altLabel;
     UILabel		*yearLabel;
