@@ -2,6 +2,8 @@
 #
 # Builds Resources/blueMarble/NN-large.jpg and night-large.jpg, the 8192x4096 Earth maps used by the location picker.
 # The magnifier shows the map at 3x, so on a large iPad these are about one pixel per screen pixel there.
+# Also NN-medium.jpg and night-medium.jpg, 2048x1024, which the picker shows while it opens (they decode quickly)
+# until the large ones are ready.
 #
 # Source: NASA Blue Marble Next Generation (public domain), 21600x10800 "world" images, one per month of 2004:
 #   https://eoimages.gsfc.nasa.gov/images/imagerecords/<id/1000>000/<id>/world.2004MM.3x21600x10800.jpg
@@ -27,7 +29,14 @@ from PIL import Image
 Image.MAX_IMAGE_PIXELS = None  # the sources are 21600x10800
 SRC, OUT = sys.argv[1], sys.argv[2]
 W, H = 8192, 4096
+MEDIUM = (2048, 1024)
 NAVY = np.array([2, 5, 70], np.float32)
+
+def save(img, name):
+    for suffix, im, quality in (('large', img, 65), ('medium', img.resize(MEDIUM, Image.LANCZOS), 85)):
+        path = f'{OUT}/{name}-{suffix}.jpg'
+        im.save(path, quality=quality, optimize=True)
+        print(path, os.path.getsize(path))
 
 def load(path):
     # Shrunk before any arithmetic:  as floats, a full-size source would take gigabytes
@@ -48,12 +57,6 @@ for month in range(1, 13):
         land = load(f'{SRC}/{month:02d}.src.jpg')
         w = ocean_weight(land)
     out = land * (1 - w) + NAVY * w
-    img = Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
-    path = f'{OUT}/{month:02d}-large.jpg'
-    img.save(path, quality=65, optimize=True)
-    print(path, os.path.getsize(path))
+    save(Image.fromarray(np.clip(out, 0, 255).astype(np.uint8)), f'{month:02d}')
 
-night = Image.open(f'{SRC}/night-src.tif').convert('RGB')  # already 8192x4096
-path = f'{OUT}/night-large.jpg'
-night.save(path, quality=65, optimize=True)
-print(path, os.path.getsize(path))
+save(Image.open(f'{SRC}/night-src.tif').convert('RGB'), 'night')  # already 8192x4096

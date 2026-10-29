@@ -108,11 +108,12 @@ textScale() {
 
 	ESWatchTime *tim = [[EOClock theClock] time];
 	ESTimeLocAstroEnvironment *env = [[EOClock theClock] env];
-	int month = tim->monthNumberUsingEnv(env);
-	NSString *path = [[NSBundle mainBundle] pathForResource:[NSString stringWithFormat:@"%02d-large", month+1] ofType:@"jpg"];
-	img = [[UIImage alloc] initWithContentsOfFile:path];  // not imageNamed:, which would cache this big image forever
+	month = tim->monthNumberUsingEnv(env);
+	// The medium maps decode quickly, so the map opens without a wait; the large ones replace them when they're
+	// ready (loadLargeImagesIfNeeded).  Not imageNamed:, which would cache these images forever.
+	img = [[UIImage alloc] initWithContentsOfFile:[[NSBundle mainBundle] pathForResource:[NSString stringWithFormat:@"%02d-medium", month+1] ofType:@"jpg"]];
 	assert(img);
-	nightImg = [[UIImage alloc] initWithContentsOfFile:[[NSBundle mainBundle] pathForResource:@"night-large" ofType:@"jpg"]];
+	nightImg = [[UIImage alloc] initWithContentsOfFile:[[NSBundle mainBundle] pathForResource:@"night-medium" ofType:@"jpg"]];
 	assert(nightImg);
 
 	redDotLayer = [[CAShapeLayer alloc] init];
@@ -300,10 +301,8 @@ textScale() {
     blueDotLayer.path = [UIBezierPath bezierPathWithArcCenter:CGPointZero radius:1.25 * markScale startAngle:0 endAngle:2*M_PI clockwise:YES].CGPath;
     blueDotLayer.lineWidth = 0.5 * markScale;
     blueDotLayer.position = [self blueDotPoint];
+    [self loadLargeImagesIfNeeded];
     // The magnifier's dots are the same, magnified with the map
-    if (framed) {
-	[self makeLoupeImage];
-    }
     loupeMapLayer.bounds = CGRectMake(0, 0, bounds.size.width * LOUPE_MAGNIFICATION, bounds.size.height * LOUPE_MAGNIFICATION);
     CATransform3D magnify = CATransform3DMakeScale(LOUPE_MAGNIFICATION, LOUPE_MAGNIFICATION, 1);
     for (CAShapeLayer *dot in @[ loupeRedDotLayer, loupeBlueDotLayer ]) {
@@ -389,42 +388,118 @@ textScale() {
     return [super pointInside:point withEvent:event] || [self pointIsOnLoupeOrLabel:point];
 }
 
+// An opaque sRGB bitmap of the given pixel size.  Made here rather than with preferredFormat, which asks the main
+// screen, so it can be used off the main thread; and wide color would double the memory of these sRGB maps.
+static UIGraphicsImageRenderer *
+mapRenderer(CGSize size) {
+    UIGraphicsImageRendererFormat *format = [[[UIGraphicsImageRendererFormat alloc] init] autorelease];
+    format.scale = 1;
+    format.opaque = YES;
+    format.preferredRange = UIGraphicsImageRendererFormatRangeStandard;
+    return [[[UIGraphicsImageRenderer alloc] initWithSize:size format:format] autorelease];
+}
+
 // As on the clock, where the small map sits over the city lights: the day/night shading erases the day image, so draw
-// that in its own layer over the night image
-- (void)drawMapInContext:(CGContextRef)context size:(CGSize)size markScale:(double)markScale {
-    [nightImg drawInRect:CGRectMake(0, 0, size.width, size.height)];
+// that in its own layer over the night image.  Takes the sun's position rather than the clock, so it can be drawn on
+// any thread.
+static void
+drawMap(CGContextRef context, UIImage *day, UIImage *night, CGSize size, double markScale, double sslng, double sslat) {
+    [night drawInRect:CGRectMake(0, 0, size.width, size.height)];
     CGContextBeginTransparencyLayer(context, NULL);
-    EODrawEarthMap(context, img, size.width, size.height, markScale, false/*drawLocation*/,
-		   [[EOClock theClock] time], [[EOClock theClock] env]);
+    EODrawEarthMapForSubsolarPoint(context, day, size.width, size.height, markScale, sslng, sslat);
     CGContextEndTransparencyLayer(context);
 }
 
-- (void)drawRect:(CGRect)rect {
-    [self drawMapInContext:UIGraphicsGetCurrentContext() size:self.bounds.size markScale:[self markScale]];
+static UIImage *
+renderMap(UIImage *day, UIImage *night, CGSize size, double markScale, double sslng, double sslat) {
+    return [mapRenderer(size) imageWithActions:^(UIGraphicsImageRendererContext *rendererContext) {
+	drawMap(rendererContext.CGContext, day, night, size, markScale, sslng, sslat);
+    }];
 }
 
-// The magnifier's map:  drawn once, as many pixels as the magnifier shows (no more than the image has), so moving the
-// magnifier only moves a layer.  Drawn again if the map grows (the iPad turned to landscape).
+static UIImage *
+scaledImage(UIImage *image, CGSize size) {
+    return [mapRenderer(size) imageWithActions:^(UIGraphicsImageRendererContext *rendererContext) {
+	[image drawInRect:CGRectMake(0, 0, size.width, size.height)];
+    }];
+}
+
+static void
+subsolarPoint(double *sslng, double *sslat) {
+    EOSubsolarPoint([[EOClock theClock] time], [[EOClock theClock] env], sslng, sslat);
+}
+
+- (void)drawRect:(CGRect)rect {
+    double sslng, sslat;
+    subsolarPoint(&sslng, &sslat);
+    drawMap(UIGraphicsGetCurrentContext(), img, nightImg, self.bounds.size, [self markScale], sslng, sslat);
+}
+
+// The magnifier's map, as many pixels as the magnifier shows (no more than the image has), drawn once so moving the
+// magnifier only moves a layer.  This is the first one, from the medium maps, until loadLargeImagesIfNeeded has
+// drawn it from the large ones.
 - (void)makeLoupeImage {
-    if (self.bounds.size.width <= 0) {
+    if (loupeImage || self.bounds.size.width <= 0) {
 	return;
     }
     double width = fmin(img.size.width, ceil(self.bounds.size.width * LOUPE_MAGNIFICATION * self.traitCollection.displayScale));
-    if (loupeImage && loupeImage.size.width >= width) {
+    CGSize size = CGSizeMake(width, round(width / 2));
+    double sslng, sslat;
+    subsolarPoint(&sslng, &sslat);
+    loupeImage = [renderMap(img, nightImg, size, [self markScale] * size.width / self.bounds.size.width, sslng, sslat) retain];
+    loupeMapLayer.contents = (id)loupeImage.CGImage;
+}
+
+// Decodes the large maps off the main thread (they take a noticeable moment), and draws from them the map at the
+// view's pixel size and the magnifier's map, which then replace the ones from the medium maps:  the map opens at once,
+// a little soft, and sharpens.  Again if the map grows (the iPad turned to landscape), as the magnifier's map is then
+// too small.  Only those two are kept, not the large maps, which would take far more memory.
+- (void)loadLargeImagesIfNeeded {
+    CGSize bounds = self.bounds.size;
+    if (bounds.width <= 0) {
 	return;
     }
+    double displayScale = self.traitCollection.displayScale;
+    double loupeWidth = ceil(bounds.width * LOUPE_MAGNIFICATION * displayScale);
+    if (loupeWidth <= largeLoupeWidth) {
+	return;  // loaded or loading, at least this large
+    }
+    largeLoupeWidth = loupeWidth;
+    CGSize viewSize = CGSizeMake(ceil(bounds.width * displayScale), ceil(bounds.height * displayScale));
+    double markScale = [self markScale];
+    double sslng, sslat;
+    subsolarPoint(&sslng, &sslat);
+    NSBundle *bundle = [NSBundle mainBundle];
+    NSString *dayPath = [bundle pathForResource:[NSString stringWithFormat:@"%02d-large", month+1] ofType:@"jpg"];
+    NSString *nightPath = [bundle pathForResource:@"night-large" ofType:@"jpg"];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+	@autoreleasepool {
+	    UIImage *day = [[[UIImage alloc] initWithContentsOfFile:dayPath] autorelease];
+	    UIImage *night = [[[UIImage alloc] initWithContentsOfFile:nightPath] autorelease];
+	    double width = fmin(day.size.width, loupeWidth);
+	    CGSize loupeSize = CGSizeMake(width, round(width / 2));
+	    UIImage *loupe = renderMap(day, night, loupeSize, markScale * width / bounds.width, sslng, sslat);
+	    UIImage *viewDay = scaledImage(day, viewSize);
+	    UIImage *viewNight = scaledImage(night, viewSize);
+	    dispatch_async(dispatch_get_main_queue(), ^{
+		[self useLargeDay:viewDay night:viewNight loupe:loupe forLoupeWidth:loupeWidth];
+	    });
+	}
+    });
+}
+
+- (void)useLargeDay:(UIImage *)day night:(UIImage *)night loupe:(UIImage *)loupe forLoupeWidth:(double)loupeWidth {
+    if (loupeWidth != largeLoupeWidth) {
+	return;  // a larger one is coming
+    }
+    [img release];
+    img = [day retain];
+    [nightImg release];
+    nightImg = [night retain];
+    [self setNeedsDisplay];
     [loupeImage release];
-    CGSize size = CGSizeMake(width, round(width / 2));
-    double markScale = [self markScale] * size.width / self.bounds.size.width;
-    UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat preferredFormat];
-    format.scale = 1;
-    format.opaque = YES;
-    format.preferredRange = UIGraphicsImageRendererFormatRangeStandard;  // the maps are sRGB; wide color would double the memory
-    UIGraphicsImageRenderer *renderer = [[[UIGraphicsImageRenderer alloc] initWithSize:size format:format] autorelease];
-    loupeImage = [[renderer imageWithActions:^(UIGraphicsImageRendererContext *rendererContext) {
-	[self drawMapInContext:rendererContext.CGContext size:size markScale:markScale];
-    }] retain];
-    loupeMapLayer.contents = (id)loupeImage.CGImage;
+    loupeImage = [loupe retain];
+    loupeMapLayer.contents = (id)loupeImage.CGImage;  // with Core Animation's implicit crossfade
 }
 
 - (CGPoint)clampedPointForTouch:(UITouch *)touch {

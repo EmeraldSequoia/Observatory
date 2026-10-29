@@ -17,6 +17,12 @@ class ESTimeLocAstroEnvironment;
 extern void EODrawEarthMap(CGContextRef context, UIImage *img, double width, double length, double markScale,
 			   bool drawLocation, ESWatchTime *tim, ESTimeLocAstroEnvironment *env);
 
+// The sun's position over the Earth (radians) at the watch's time, which is all EODrawEarthMap needs the time for...
+extern void EOSubsolarPoint(ESWatchTime *tim, ESTimeLocAstroEnvironment *env, double *sslng, double *sslat);
+// ...so that the map, without the location's dot, can be drawn from it on any thread
+extern void EODrawEarthMapForSubsolarPoint(CGContextRef context, UIImage *img, double width, double length, double markScale,
+					   double sslng, double sslat);
+
 
 @interface EOEarthView : EOHandView {
     UIImage	    *img;

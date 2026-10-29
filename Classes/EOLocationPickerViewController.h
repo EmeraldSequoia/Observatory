@@ -37,7 +37,9 @@ class ESGeoNames;
     CAShapeLayer        *loupeRedDotLayer;  // ...with the dots on it
     CAShapeLayer        *loupeBlueDotLayer;
     CAShapeLayer        *loupeCursorLayer;
-    UIImage             *loupeImage;   // the map as drawn, at the image's own resolution; made at the first touch
+    UIImage             *loupeImage;   // the map as drawn, at the magnifier's resolution
+    int                 month;         // which month's map, 0-11
+    double              largeLoupeWidth;  // the magnifier's map from the large maps is this wide, or is being drawn
     bool                framed;        // the magnifier and label show, with the frame around them
     bool                fadingOut;     // not framed, but the magnifier and label still show, fading
     UIView              *labelPlate;   // the black rounded plate holding the two labels

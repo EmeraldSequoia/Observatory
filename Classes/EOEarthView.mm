@@ -184,24 +184,25 @@ static void drawBoundariesForAltitudeIntoContext(CGContextRef context,
     traceExit("EOEarthView: drawBoundaries");
 }
     
-void EODrawEarthMap(CGContextRef context, UIImage *img, double width, double length, double markScale,
-		    bool drawLocation, ESWatchTime *tim, ESTimeLocAstroEnvironment *env) {
+void EOSubsolarPoint(ESWatchTime *tim, ESTimeLocAstroEnvironment *env, double *sslng, double *sslat) {
+    NSTimeInterval t = tim->currentTime();
+    NSTimeInterval solar = tim->secondsSinceMidnightValueUsingEnv(env) - tim->tzOffsetUsingEnv(env) + EOTSecondsForDateInterval(t);
+    double lng = (180 - solar/3600*15);
+    if (lng < -180) {
+	lng += 360;
+    }
+    *sslng = lng * twoPi/360;
+    *sslat = cachelessSunDecl(t);
+}
+
+void EODrawEarthMapForSubsolarPoint(CGContextRef context, UIImage *img, double width, double length, double markScale,
+				    double sslng, double sslat) {
     tracePrintf("EOEarthView: drawInRect start");
     [img drawInRect:CGRectMake(0, 0, width, length)];
     tracePrintf("EOEarthView: drawInRect done");
     //tracePrintf("draw img");
 
 #ifndef CAPTUREDEFAULTS
-    NSTimeInterval t = tim->currentTime();
-
-    // compute subsolar point
-    NSTimeInterval solar = tim->secondsSinceMidnightValueUsingEnv(env) - tim->tzOffsetUsingEnv(env) + EOTSecondsForDateInterval(t);
-    double sslng = (180 - solar/3600*15);
-    if (sslng < -180) {
-	sslng += 360;
-    }
-    sslng *= twoPi/360;
-    const double sslat = cachelessSunDecl(t);
 
 #define TWILIGHT_ALT (-18.*M_PI/180.)		// start/end of nautical twilight
 
@@ -245,7 +246,16 @@ void EODrawEarthMap(CGContextRef context, UIImage *img, double width, double len
 	//printf("subsolar latitude = %+5.1f;   longitude = %+6.1f   [%.0f,%.0f]\n", sslat*360/twoPi, sslng*360/twoPi, lngToX(sslng), latToY(sslat));
 	
     }
-    
+#endif
+}
+
+void EODrawEarthMap(CGContextRef context, UIImage *img, double width, double length, double markScale,
+		    bool drawLocation, ESWatchTime *tim, ESTimeLocAstroEnvironment *env) {
+    double sslng, sslat;
+    EOSubsolarPoint(tim, env, &sslng, &sslat);
+    EODrawEarthMapForSubsolarPoint(context, img, width, length, markScale, sslng, sslat);
+
+#ifndef CAPTUREDEFAULTS
     // draw current location
     if (drawLocation) {
 	ESLocation *location = env->location();
