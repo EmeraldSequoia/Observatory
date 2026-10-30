@@ -101,8 +101,9 @@ static int activeCleanupID = 0;
 
 + (void)repeatRing:(void*) ignoreMe {
     if (lastTime || ringCounter >= numRings) {
-	// let it fade out then cleanup
-	ringTimer = [NSTimer scheduledTimerWithTimeInterval:5.0 target:self selector:@selector(cleanUp:) userInfo:[NSNumber numberWithInt:++activeCleanupID] repeats:false];
+	// let it fade out then cleanup.  The last chime started 2s ago (the ring interval below) and Chime.wav
+	// is ~10s long; disposing the sound ID cuts off playback, so wait out the rest of the tail.
+	ringTimer = [NSTimer scheduledTimerWithTimeInterval:8.5 target:self selector:@selector(cleanUp:) userInfo:[NSNumber numberWithInt:++activeCleanupID] repeats:false];
 	ringing = false;
 	    } else {
 	// play it
