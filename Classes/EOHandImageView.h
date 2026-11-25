@@ -13,6 +13,11 @@
 @interface EOHandImageView : EOHandView {
     UIImage	*img;
     double	radius;
+    // Saturn only: the ring geometry last drawn (radians), drawn in code rather than from img
+    double	ringEarthTilt;
+    double	ringSunTilt;
+    double	ringDeltaU;
+    bool	ringGeometryValid;
 }
 
 - (EOHandImageView *)initWithKind:(EOHandKind)aKind name:(NSString *)fn x:(double)ax y:(double)ay radius:(double)aRadius update:(double)aUpdate;

@@ -127,6 +127,7 @@
 		A9E3F9821151E1DE008E39AC /* EOHandTriangleView.mm in Sources */ = {isa = PBXBuildFile; fileRef = A9E3F9811151E1DE008E39AC /* EOHandTriangleView.mm */; };
 		A9E3FA341151F36D008E39AC /* EORingView.mm in Sources */ = {isa = PBXBuildFile; fileRef = A9E3FA331151F36D008E39AC /* EORingView.mm */; };
 		A9E3FD6611521103008E39AC /* EOHandImageView.mm in Sources */ = {isa = PBXBuildFile; fileRef = A9E3FD6511521103008E39AC /* EOHandImageView.mm */; };
+		3048BFD16A46472935890C64 /* EOSaturnRenderer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4527261295E76EE913DB8AE9 /* EOSaturnRenderer.cpp */; };
 		A9E3FDA311521863008E39AC /* earth.png in Resources */ = {isa = PBXBuildFile; fileRef = A9E3FD9C11521863008E39AC /* earth.png */; };
 		A9E3FDA411521863008E39AC /* jupiter.png in Resources */ = {isa = PBXBuildFile; fileRef = A9E3FD9D11521863008E39AC /* jupiter.png */; };
 		A9E3FDA511521863008E39AC /* mars.png in Resources */ = {isa = PBXBuildFile; fileRef = A9E3FD9E11521863008E39AC /* mars.png */; };
@@ -449,6 +450,8 @@
 		A9E3FA331151F36D008E39AC /* EORingView.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = EORingView.mm; path = Classes/EORingView.mm; sourceTree = "<group>"; };
 		A9E3FD6411521103008E39AC /* EOHandImageView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = EOHandImageView.h; path = Classes/EOHandImageView.h; sourceTree = "<group>"; };
 		A9E3FD6511521103008E39AC /* EOHandImageView.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = EOHandImageView.mm; path = Classes/EOHandImageView.mm; sourceTree = "<group>"; };
+		BFD8DDDEE82764851A75B416 /* EOSaturnRenderer.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = EOSaturnRenderer.hpp; path = Classes/EOSaturnRenderer.hpp; sourceTree = "<group>"; };
+		4527261295E76EE913DB8AE9 /* EOSaturnRenderer.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = EOSaturnRenderer.cpp; path = Classes/EOSaturnRenderer.cpp; sourceTree = "<group>"; };
 		A9E3FD9C11521863008E39AC /* earth.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = earth.png; path = Resources/earth.png; sourceTree = "<group>"; };
 		A9E3FD9D11521863008E39AC /* jupiter.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = jupiter.png; path = Resources/jupiter.png; sourceTree = "<group>"; };
 		A9E3FD9E11521863008E39AC /* mars.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = mars.png; path = Resources/mars.png; sourceTree = "<group>"; };
@@ -785,6 +788,8 @@
 				A9B92B83115C7BAA00C5BE0F /* EOHandBreguetView.mm */,
 				A9E3FD6411521103008E39AC /* EOHandImageView.h */,
 				A9E3FD6511521103008E39AC /* EOHandImageView.mm */,
+				BFD8DDDEE82764851A75B416 /* EOSaturnRenderer.hpp */,
+				4527261295E76EE913DB8AE9 /* EOSaturnRenderer.cpp */,
 				A97AA09711E43CF9009F5C00 /* EOHandNeedleView.h */,
 				A97AA09811E43CF9009F5C00 /* EOHandNeedleView.mm */,
 				A9E3F9801151E1DE008E39AC /* EOHandTriangleView.h */,
@@ -1222,6 +1227,7 @@
 				A9E3F9821151E1DE008E39AC /* EOHandTriangleView.mm in Sources */,
 				A9E3FA341151F36D008E39AC /* EORingView.mm in Sources */,
 				A9E3FD6611521103008E39AC /* EOHandImageView.mm in Sources */,
+				3048BFD16A46472935890C64 /* EOSaturnRenderer.cpp in Sources */,
 				A9E301D01152F0B5008E39AC /* EOMoonView.mm in Sources */,
 				A9B92B84115C7BAA00C5BE0F /* EOHandBreguetView.mm in Sources */,
 				92FEA68D1162CC0F008D16D6 /* EOShuffleView.mm in Sources */,
@@ -1339,7 +1345,7 @@
 					"$(inherited)",
 					"\"$(SRCROOT)\"",
 				);
-				MARKETING_VERSION = 1.7.1;
+				MARKETING_VERSION = 1.8;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.emeraldsequoia.${PRODUCT_NAME:rfc1034identifier}";
 				PRODUCT_NAME = Observatory;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1370,7 +1376,7 @@
 					"$(inherited)",
 					"\"$(SRCROOT)\"",
 				);
-				MARKETING_VERSION = 1.7.1;
+				MARKETING_VERSION = 1.8;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.emeraldsequoia.${PRODUCT_NAME:rfc1034identifier}";
 				PRODUCT_NAME = Observatory;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1453,7 +1459,7 @@
 					"$(inherited)",
 					"\"$(SRCROOT)\"",
 				);
-				MARKETING_VERSION = 1.7.1;
+				MARKETING_VERSION = 1.8;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.emeraldsequoia.${PRODUCT_NAME:rfc1034identifier}";
 				PRODUCT_NAME = Observatory;
 				PROVISIONING_PROFILE_SPECIFIER = "";
