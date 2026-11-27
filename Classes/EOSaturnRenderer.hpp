@@ -3,7 +3,7 @@
 //  Emerald Observatory
 //
 //  Draws Saturn and its rings as a telescope shows them on a given date: a ray-traced oblate globe
-//  and ring plane, with the ring opening and lit face taken from Meeus chapter 45 (esastro's
+//  and ring plane, with the ring opening and lit face taken from Meeus chapter 45 with the IAU pole (esastro's
 //  saturnRingGeometry), the globe's shadow on the rings, and the rings' shadow on the globe.
 //
 //  The view is the sky view, not inverted: Saturn's north is up and the planet's prograde
