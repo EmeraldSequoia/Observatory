@@ -271,6 +271,51 @@ static void drawTicks(CGContextRef context, CGPoint c, int n, double r1, double 
     CGContextStrokePath(context);
 }
 
+// A round gilt wire, lit from the upper left like the brass: shaded as a cylinder, dark at its edges
+// and brightening toward its middle, with the brightest line drawn toward the light and a specular
+// glint on it, and a small shadow on the dial beneath.  width is the whole wire's.
+static void strokeGilt(CGContextRef context, CGPathRef path, UIColor *color, double width) {
+    CGFloat r, g, b, a;
+    [color getRed:&r green:&g blue:&b alpha:&a];
+    CGContextSaveGState(context);
+    CGContextSetLineJoin(context, kCGLineJoinRound);
+    CGContextSetLineCap(context, kCGLineCapRound);
+    // The edge of the wire, carrying the shadow
+    CGContextSaveGState(context);
+    CGContextSetShadowWithColor(context, CGSizeMake(width * 0.2, width * 0.3), width * 0.35,
+                                [UIColor colorWithWhite:0 alpha:0.8].CGColor);
+    CGContextSetRGBStrokeColor(context, r * 0.3, g * 0.3, b * 0.3, a);
+    CGContextSetLineWidth(context, width);
+    CGContextAddPath(context, path);
+    CGContextStrokePath(context);
+    CGContextRestoreGState(context);
+    // Ever narrower strokes inward: each the colour of the cylinder where its edge is, by how squarely the
+    // surface there faces us, and each moved a little further toward the light
+    const int steps = 10;
+    for (int k = 1; k < steps; k++) {
+        double f = 1 - (double)k / steps;        // the stroke's half width, as a fraction of the wire's
+        double facing = sqrt(1 - f * f);
+        double shade = 0.3 + 0.8 * facing;
+        double shine = fmax(0, facing - 0.8) * 2;       // toward white only near the middle
+        double shift = width * 0.18 * k / steps;
+        CGContextSaveGState(context);
+        CGContextTranslateCTM(context, -shift * 0.6, -shift * 0.8);
+        CGContextSetRGBStrokeColor(context, fmin(1, r * shade) * (1 - shine) + shine, fmin(1, g * shade) * (1 - shine) + shine,
+                                   fmin(1, b * shade) * (1 - shine) + shine, a);
+        CGContextSetLineWidth(context, width * f);
+        CGContextAddPath(context, path);
+        CGContextStrokePath(context);
+        CGContextRestoreGState(context);
+    }
+    // The glint
+    CGContextTranslateCTM(context, -width * 0.15, -width * 0.2);
+    CGContextSetRGBStrokeColor(context, 1, 1, 0.95, 0.9 * a);
+    CGContextSetLineWidth(context, width * 0.12);
+    CGContextAddPath(context, path);
+    CGContextStrokePath(context);
+    CGContextRestoreGState(context);
+}
+
 // A ship's engine order telegraph's handle, framing a dial's selected position: in its own frame, x out
 // along that position's radius, a wedge narrow at the hub, its sides reaching the rim halfway between the full
 // tick midway to each neighbour and the half tick before it, its end following the rim, its corners rounded;
@@ -295,20 +340,15 @@ static void drawHandle(CGContextRef context, CGPoint c, double angle, double rim
     CGPathAddLineToPoint(loop, NULL, inner, innerHalf);
     CGPathAddArc(loop, NULL, inner, 0, innerHalf, M_PI / 2, 3 * M_PI / 2, false);
     CGPathCloseSubpath(loop);
-    CGContextSaveGState(context);
-    CGContextTranslateCTM(context, c.x, c.y);
-    CGContextRotateCTM(context, angle - M_PI / 2);
-    CGContextSetStrokeColorWithColor(context, color.CGColor);
-    CGContextSetLineJoin(context, kCGLineJoinRound);
-    CGContextSetLineWidth(context, 2);
-    CGContextAddPath(context, loop);
-    CGContextStrokePath(context);
     if (stem) {
-        CGContextMoveToPoint(context, 0, 0);
-        CGContextAddLineToPoint(context, inner - innerHalf, 0);
-        CGContextStrokePath(context);
+        CGPathMoveToPoint(loop, NULL, 0, 0);
+        CGPathAddLineToPoint(loop, NULL, inner - innerHalf, 0);
     }
-    CGContextRestoreGState(context);
+    // Into the view's frame, so the light falls from the same side whichever way the handle points
+    CGAffineTransform place = CGAffineTransformRotate(CGAffineTransformMakeTranslation(c.x, c.y), angle - M_PI / 2);
+    CGPathRef placed = CGPathCreateCopyByTransformingPath(loop, &place);
+    strokeGilt(context, placed, color, 4.2);
+    CGPathRelease(placed);
     CGPathRelease(loop);
 }
 
@@ -399,12 +439,23 @@ static void drawGraduations(CGContextRef context, CGPoint c, int n, double rim, 
     UIColor *gold = [UIColor colorWithRed:1 green:0xc1/256.0 blue:0x25/256.0 alpha:1];      // the clock's minute hand
     drawHandle(context, c, (int)unit * step, rim, hubR, step, gold, 0);
 
-    // The hub the handle turns on
-    CGContextSetLineWidth(context, 1);
-    CGContextSetStrokeColorWithColor(context, gold.CGColor);
-    CGContextSetRGBFillColor(context, 0.15, 0.15, 0.15, 1);
-    CGContextAddArc(context, c.x, c.y, hubR, 0, 2 * M_PI, 0);
-    CGContextDrawPath(context, kCGPathFillStroke);
+    // The hub the handle turns on: a dark boss, lighter toward the upper left, in a gilt ring
+    CGRect hubRect = CGRectMake(c.x - hubR, c.y - hubR, 2 * hubR, 2 * hubR);
+    CGContextSaveGState(context);
+    CGContextAddEllipseInRect(context, hubRect);
+    CGContextClip(context);
+    CGFloat boss[] = { 0.6, 0.6, 0.6, 1,   0.15, 0.15, 0.15, 1,   0.07, 0.07, 0.07, 1 };
+    CGFloat bossAt[] = { 0, 0.55, 1 };
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+    CGGradientRef bossGradient = CGGradientCreateWithColorComponents(space, boss, bossAt, 3);
+    CGColorSpaceRelease(space);
+    CGContextDrawRadialGradient(context, bossGradient, CGPointMake(c.x - hubR * 0.35, c.y - hubR * 0.4), 0, c, hubR,
+                                kCGGradientDrawsAfterEndLocation);
+    CGGradientRelease(bossGradient);
+    CGContextRestoreGState(context);
+    CGPathRef ring = CGPathCreateWithEllipseInRect(hubRect, NULL);
+    strokeGilt(context, ring, gold, 3);
+    CGPathRelease(ring);
 }
 
 // The position nearest a point on the rim
